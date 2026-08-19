@@ -92,19 +92,27 @@ onMounted(async () => {
     store.launcherUpdate.restarting = true
   })
 
-  // Self-update check (like gitdesktop): query GitHub Releases on start
-  setTimeout(async () => {
-    try {
-      const info = await CheckLauncherUpdate()
-      if (info && info.updateAvailable) {
-        store.launcherUpdate.info = info
-        store.launcherUpdate.error = ''
-        if (store.settings.launcherUpdates) {
-          store.launcherUpdate.modalOpen = true
+  // Self-update check (like gitdesktop): query GitHub Releases on start.
+  // GitHub can return 404 for a fresh release for up to ~60s (the
+  // /releases/latest endpoint lags), so retry a few times before giving up.
+  (async function checkUpdates() {
+    const delays = [3000, 15000, 40000, 90000]
+    for (const delay of delays) {
+      await new Promise(r => setTimeout(r, delay))
+      try {
+        const info = await CheckLauncherUpdate()
+        if (info && info.updateAvailable) {
+          store.launcherUpdate.info = info
+          store.launcherUpdate.error = ''
+          if (store.settings.launcherUpdates) {
+            store.launcherUpdate.modalOpen = true
+          }
+          return
         }
-      }
-    } catch (e) { /* offline or no backend */ }
-  }, 3000)
+        if (info && !info.error) return // check succeeded, no newer release
+      } catch (e) { /* offline or GitHub not reachable yet — retry */ }
+    }
+  })()
 
   EventsOn('instances-updated', (list) => {
     if (Array.isArray(list)) {

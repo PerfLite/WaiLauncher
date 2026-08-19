@@ -17,7 +17,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const launcherVersion = "1.0.0"
+const launcherVersion = "1.0.1"
 
 // VersionEntry is one row of the frontend version dropdown.
 type VersionEntry struct {

@@ -61,8 +61,7 @@ const loadingCrashes = ref(false)
 const logSearchOpen = ref(false)
 const logSearchQuery = ref('')
 
-/* Per-instance launch config editor */
-const launchConfigOpen = ref(false)
+/* Per-instance launch config (edited inside the unified settings modal) */
 const editRAMGB = ref(0) // 0 = inherit
 const editJavaPath = ref('')
 const editJVMArgs = ref('')
@@ -70,7 +69,6 @@ const editUseCustomWindow = ref(false)
 const editFullscreen = ref(false)
 const editWinW = ref(854)
 const editWinH = ref(480)
-const savingLaunchCfg = ref(false)
 
 /* Selection */
 const selectedFiles = ref({})
@@ -481,55 +479,6 @@ async function onCloneInstance() {
   }
 }
 
-/* Per-instance launch config */
-function openLaunchConfig() {
-  if (!selectedInst.value) return
-  const ins = selectedInst.value
-  editRAMGB.value = ins.ramMb ? Math.round(ins.ramMb / 1024) : 0
-  editJavaPath.value = ins.javaPath || ''
-  editJVMArgs.value = ins.jvmArgs || ''
-  editUseCustomWindow.value = !!ins.useCustomWindow
-  editFullscreen.value = !!ins.fullscreen
-  editWinW.value = ins.windowWidth || 854
-  editWinH.value = ins.windowHeight || 480
-  launchConfigOpen.value = true
-}
-
-async function browseInstanceJava() {
-  try {
-    const p = await PickJavaPath()
-    if (p) editJavaPath.value = p
-  } catch (e) { /* preview mode */ }
-}
-
-async function saveLaunchConfig() {
-  if (!selectedInst.value || savingLaunchCfg.value) return
-  savingLaunchCfg.value = true
-  try {
-    const ramMB = editRAMGB.value > 0 ? editRAMGB.value * 1024 : 0
-    const updated = await UpdateInstanceLaunchConfig(
-      selectedInst.value.id,
-      ramMB,
-      editJavaPath.value,
-      editJVMArgs.value,
-      editUseCustomWindow.value,
-      editFullscreen.value,
-      editWinW.value,
-      editWinH.value
-    )
-    if (updated) {
-      const inStore = store.instances.find(i => i.id === updated.id)
-      if (inStore) Object.assign(inStore, updated)
-      toast(t('settings.saved'))
-      launchConfigOpen.value = false
-    }
-  } catch (e) {
-    toast((t('inst.err') || 'Ошибка: ') + e, true)
-  } finally {
-    savingLaunchCfg.value = false
-  }
-}
-
 /* Folder Actions */
 function openInstanceFolder() {
   if (selectedInst.value) {
@@ -815,12 +764,30 @@ async function onImportInstance() {
   }
 }
 
-/* Edit Instance Settings */
+/* Edit Instance Settings (unified: general + launch config) */
+const settingsTab = ref('general') // 'general' | 'launch'
+
 function openEditSettings() {
   if (!selectedInst.value) return
   editName.value = selectedInst.value.name
   editServer.value = selectedInst.value.serverAddress || ''
+  const ins = selectedInst.value
+  editRAMGB.value = ins.ramMb ? Math.round(ins.ramMb / 1024) : 0
+  editJavaPath.value = ins.javaPath || ''
+  editJVMArgs.value = ins.jvmArgs || ''
+  editUseCustomWindow.value = !!ins.useCustomWindow
+  editFullscreen.value = !!ins.fullscreen
+  editWinW.value = ins.windowWidth || 854
+  editWinH.value = ins.windowHeight || 480
+  settingsTab.value = 'general'
   editSettingsOpen.value = true
+}
+
+async function browseInstanceJava() {
+  try {
+    const p = await PickJavaPath()
+    if (p) editJavaPath.value = p
+  } catch (e) { /* preview mode */ }
 }
 
 async function saveInstanceSettings() {
@@ -836,9 +803,24 @@ async function saveInstanceSettings() {
         inStore.name = updated.name
         inStore.serverAddress = updated.serverAddress
       }
-      toast(t('settings.saved'))
-      editSettingsOpen.value = false
     }
+    const ramMB = editRAMGB.value > 0 ? editRAMGB.value * 1024 : 0
+    const cfg = await UpdateInstanceLaunchConfig(
+      selectedInst.value.id,
+      ramMB,
+      editJavaPath.value,
+      editJVMArgs.value,
+      editUseCustomWindow.value,
+      editFullscreen.value,
+      editWinW.value,
+      editWinH.value
+    )
+    if (cfg) {
+      const inStore = store.instances.find(i => i.id === cfg.id)
+      if (inStore) Object.assign(inStore, cfg)
+    }
+    toast(t('settings.saved'))
+    editSettingsOpen.value = false
   } catch (e) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   } finally {
@@ -1062,18 +1044,6 @@ async function saveInstanceSettings() {
                 </template>
                 <template v-else>{{ t('profile.play') }}</template>
               </span>
-            </button>
-
-            <button class="mr-btn-icon" :title="t('inst.export')" :disabled="exportingInst" @click="onExportInstance">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </button>
-
-            <button class="mr-btn-icon" :title="t('inst.clone')" @click="onCloneInstance">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            </button>
-
-            <button class="mr-btn-icon" :title="t('inst.launchConfig')" @click="openLaunchConfig">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             </button>
 
             <button class="mr-btn-icon" :title="t('inst.editSettings')" @click="openEditSettings">
@@ -1714,17 +1684,35 @@ async function saveInstanceSettings() {
       </div>
     </div>
 
-    <!-- Edit Instance Settings Modal (Rename & Quick Connect) -->
+    <!-- Unified Instance Settings Modal (name/server + launch config + clone/export) -->
     <div class="modal-root" v-if="editSettingsOpen">
       <div class="modal-backdrop" @click="editSettingsOpen = false"></div>
-      <div class="modal-box">
+      <div class="modal-box inst-settings-modal">
         <div class="modal-header">
           <h3 class="modal-title">{{ t('inst.editSettings') }}</h3>
           <button class="modal-close" @click="editSettingsOpen = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        <div class="modal-body">
+
+        <!-- Tabs -->
+        <div class="inst-settings-tabs">
+          <button class="inst-settings-tab" :class="{active: settingsTab === 'general'}" @click="settingsTab = 'general'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M19.1 4.9 17 7 M7 17l-2.1 2.1"/></svg>
+            <span>{{ t('inst.tabGeneral') || 'Основное' }}</span>
+          </button>
+          <button class="inst-settings-tab" :class="{active: settingsTab === 'launch'}" @click="settingsTab = 'launch'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <span>{{ t('inst.tabLaunch') || 'Запуск' }}</span>
+          </button>
+          <button class="inst-settings-tab" :class="{active: settingsTab === 'actions'}" @click="settingsTab = 'actions'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+            <span>{{ t('inst.tabActions') || 'Действия' }}</span>
+          </button>
+        </div>
+
+        <!-- TAB: General -->
+        <div class="modal-body inst-settings-body" v-show="settingsTab === 'general'">
           <div class="fld-group">
             <label class="fld-label">{{ t('inst.name') }}</label>
             <input class="txt-in" v-model="editName" :placeholder="t('inst.namePh')">
@@ -1735,26 +1723,9 @@ async function saveInstanceSettings() {
             <span style="font-size: 12px; color: var(--muted); margin-top: 4px;">{{ t('inst.serverAddressHint') }}</span>
           </div>
         </div>
-        <div class="modal-foot">
-          <button class="btn-sec" @click="editSettingsOpen = false">{{ t('inst.cancel') }}</button>
-          <button class="btn-primary" :disabled="savingSettings" @click="saveInstanceSettings">
-            {{ savingSettings ? 'Сохранение…' : t('inst.saveSettings') }}
-          </button>
-        </div>
-      </div>
-    </div>
 
-    <!-- Per-Instance Launch Config Modal (RAM, Java, JVM args, window) -->
-    <div class="modal-root" v-if="launchConfigOpen">
-      <div class="modal-backdrop" @click="launchConfigOpen = false"></div>
-      <div class="modal-box launch-cfg-modal">
-        <div class="modal-header">
-          <h3 class="modal-title">{{ t('inst.launchConfig') }}</h3>
-          <button class="modal-close" @click="launchConfigOpen = false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div class="modal-body launch-cfg-body">
+        <!-- TAB: Launch (RAM, Java, JVM args, window) -->
+        <div class="modal-body inst-settings-body launch-cfg-body" v-show="settingsTab === 'launch'">
           <p class="launch-cfg-hint">{{ t('inst.launchConfigHint') }}</p>
 
           <div class="fld-group">
@@ -1795,10 +1766,44 @@ async function saveInstanceSettings() {
             </template>
           </div>
         </div>
+
+        <!-- TAB: Actions (clone, export) -->
+        <div class="modal-body inst-settings-body" v-show="settingsTab === 'actions'">
+          <button class="inst-action-row" @click="onCloneInstance(); editSettingsOpen = false">
+            <div class="inst-action-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            </div>
+            <div class="inst-action-text">
+              <span class="inst-action-name">{{ t('inst.clone') }}</span>
+              <span class="inst-action-desc">{{ t('inst.cloneDesc') || 'Полная копия сборки с модами и настройками' }}</span>
+            </div>
+          </button>
+
+          <button class="inst-action-row" :disabled="exportingInst" @click="onExportInstance(); editSettingsOpen = false">
+            <div class="inst-action-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <div class="inst-action-text">
+              <span class="inst-action-name">{{ t('inst.export') }}</span>
+              <span class="inst-action-desc">{{ t('inst.exportDesc') || 'Сохранить сборку в файл (.mrpack / .zip)' }}</span>
+            </div>
+          </button>
+
+          <button class="inst-action-row" @click="openInstanceFolder">
+            <div class="inst-action-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+            </div>
+            <div class="inst-action-text">
+              <span class="inst-action-name">{{ t('profile.openFolder') }}</span>
+              <span class="inst-action-desc">{{ t('inst.openFolderDesc') || 'Открыть папку сборки в проводнике' }}</span>
+            </div>
+          </button>
+        </div>
+
         <div class="modal-foot">
-          <button class="btn-sec" @click="launchConfigOpen = false">{{ t('inst.cancel') }}</button>
-          <button class="btn-primary" :disabled="savingLaunchCfg" @click="saveLaunchConfig">
-            {{ savingLaunchCfg ? 'Сохранение…' : t('inst.saveSettings') }}
+          <button class="btn-sec" @click="editSettingsOpen = false">{{ t('inst.cancel') }}</button>
+          <button class="btn-primary" :disabled="savingSettings" @click="saveInstanceSettings">
+            {{ savingSettings ? 'Сохранение…' : t('inst.saveSettings') }}
           </button>
         </div>
       </div>
