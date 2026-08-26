@@ -237,7 +237,7 @@ async function checkUpdateNow() {
                   {{ currentAcc?.type === 'microsoft' ? t('accounts.type.microsoft') : t('accounts.type.offline') }}
                 </span>
               </div>
-              <button class="btn-sec" @click="store.accountsModalOpen = true">
+              <button class="btn-sec" @click="store.page = 'accounts'">
                 {{ t('settings.accountManage') }}
               </button>
             </div>

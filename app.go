@@ -731,25 +731,28 @@ func (a *App) RefreshAccount(id string) (*auth.Account, error) {
 	if a.accounts == nil {
 		return nil, fmt.Errorf("accounts manager not initialized")
 	}
-	data := a.accounts.GetData()
-	var target *auth.Account
-	for i := range data.Accounts {
-		if data.Accounts[i].ID == id {
-			target = &data.Accounts[i]
-			break
-		}
-	}
-	if target == nil {
-		return nil, fmt.Errorf("account not found")
+	acc, err := a.accounts.GetAccount(id)
+	if err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	if err := a.accounts.EnsureValidAccount(ctx, target); err != nil {
-		return nil, err
+
+	if acc.Type == auth.AccountTypeMicrosoft {
+		if err := a.accounts.ForceRefreshAccount(ctx, acc); err != nil {
+			return nil, err
+		}
+		// Enrich capes with DataURLs
+		for i := range acc.Capes {
+			if dataURL, err := auth.FetchTextureBase64(ctx, acc.Capes[i].URL); err == nil {
+				acc.Capes[i].DataURL = dataURL
+			}
+		}
+		_, _ = a.accounts.UpdateCape(acc.ID, acc.CapeURL, acc.Capes)
 	}
 
-	return target, nil
+	return acc, nil
 }
 
 // PickSkinFile opens a dialog to select a skin PNG file.
@@ -913,9 +916,31 @@ func (a *App) ClearAccountCape(accountID string) (*auth.Account, error) {
 	return a.accounts.UpdateCape(acc.ID, "", nil)
 }
 
-// GetPresetCapes returns curated list of preset capes.
+// GetPresetCapes returns curated list of preset capes with base64 DataURLs preloaded.
 func (a *App) GetPresetCapes() []auth.PresetCape {
-	return auth.GetPresetCapes()
+	capes := auth.GetPresetCapes()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for i := range capes {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			if dataURL, err := auth.FetchTextureBase64(ctx, capes[idx].URL); err == nil {
+				capes[idx].DataURL = dataURL
+			}
+		}(i)
+	}
+	wg.Wait()
+	return capes
+}
+
+// FetchTextureBase64 fetches an image from URL and returns a data:image/png;base64 string.
+func (a *App) FetchTextureBase64(url string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return auth.FetchTextureBase64(ctx, url)
 }
 
 

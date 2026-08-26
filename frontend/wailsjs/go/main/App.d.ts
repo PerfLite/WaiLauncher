@@ -40,6 +40,8 @@ export function DownloadLauncherUpdate():Promise<void>;
 
 export function ExportInstance(arg1:string):Promise<string>;
 
+export function FetchTextureBase64(arg1:string):Promise<string>;
+
 export function GetAccounts():Promise<auth.AccountsData>;
 
 export function GetArticle(arg1:string):Promise<launcher.ArticleDetails>;

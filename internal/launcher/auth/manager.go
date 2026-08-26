@@ -267,6 +267,29 @@ func (m *AccountManager) Remove(id string) error {
 }
 
 // EnsureValidAccount checks and refreshes tokens if the account is Microsoft and expired.
+// ForceRefreshAccount unconditionally re-fetches Minecraft profile, skins, capes and tokens.
+func (m *AccountManager) ForceRefreshAccount(ctx context.Context, acc *Account) error {
+	if acc == nil {
+		return errors.New("account is nil")
+	}
+	if acc.Type == AccountTypeMicrosoft {
+		if err := RefreshAccountTokens(ctx, m.clientID, acc); err != nil {
+			return fmt.Errorf("refresh failed: %w", err)
+		}
+
+		m.mu.Lock()
+		for i := range m.data.Accounts {
+			if m.data.Accounts[i].ID == acc.ID {
+				m.data.Accounts[i] = *acc
+				break
+			}
+		}
+		_ = m.saveLocked()
+		m.mu.Unlock()
+	}
+	return nil
+}
+
 func (m *AccountManager) EnsureValidAccount(ctx context.Context, acc *Account) error {
 	if acc == nil {
 		return errors.New("account is nil")

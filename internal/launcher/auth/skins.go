@@ -3,13 +3,67 @@ package auth
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"sync"
 )
+
+var (
+	textureCache   = make(map[string]string)
+	textureCacheMu sync.RWMutex
+)
+
+// FetchTextureBase64 downloads an image from a URL with authentic headers and returns a data:image/png;base64 string.
+func FetchTextureBase64(ctx context.Context, imgURL string) (string, error) {
+	if imgURL == "" {
+		return "", fmt.Errorf("empty url")
+	}
+	if strings.HasPrefix(imgURL, "data:image") {
+		return imgURL, nil
+	}
+
+	textureCacheMu.RLock()
+	if cached, ok := textureCache[imgURL]; ok {
+		textureCacheMu.RUnlock()
+		return cached, nil
+	}
+	textureCacheMu.RUnlock()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imgURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "image/png,image/*;q=0.9,*/*;q=0.8")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("download texture error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("texture download failed HTTP %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read texture body: %w", err)
+	}
+
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+
+	textureCacheMu.Lock()
+	textureCache[imgURL] = dataURL
+	textureCacheMu.Unlock()
+
+	return dataURL, nil
+}
 
 // UploadSkinToMojang uploads skin PNG image bytes to official Mojang servers.
 func UploadSkinToMojang(ctx context.Context, mcToken string, fileBytes []byte, filename, variant string) error {

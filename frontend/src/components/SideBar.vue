@@ -193,7 +193,12 @@ function openCreateInstance() {
     </div>
 
     <!-- Profile card at bottom -->
-    <div class="profile-card" @click="store.accountsModalOpen = true" :title="t('profile.open')">
+    <div
+      class="profile-card"
+      :class="{active: store.page === 'accounts'}"
+      @click="store.page = 'accounts'"
+      :title="t('profile.open')"
+    >
       <div class="p-avatar-wrap">
         <img :src="avatarUrl" @error="onAvatarError" alt="Skin">
         <span class="p-type-dot" :class="currentAcc?.type"></span>

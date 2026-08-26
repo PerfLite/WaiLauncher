@@ -74,6 +74,10 @@ export function ExportInstance(arg1) {
   return window['go']['main']['App']['ExportInstance'](arg1);
 }
 
+export function FetchTextureBase64(arg1) {
+  return window['go']['main']['App']['FetchTextureBase64'](arg1);
+}
+
 export function GetAccounts() {
   return window['go']['main']['App']['GetAccounts']();
 }

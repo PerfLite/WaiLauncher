@@ -25,10 +25,11 @@ type MCTokenData struct {
 
 // MojangCape represents a cape associated with a Minecraft profile.
 type MojangCape struct {
-	ID    string `json:"id"`
-	State string `json:"state"` // "ACTIVE" | "INACTIVE"
-	URL   string `json:"url"`
-	Alias string `json:"alias"`
+	ID      string `json:"id"`
+	State   string `json:"state"` // "ACTIVE" | "INACTIVE"
+	URL     string `json:"url"`
+	Alias   string `json:"alias"`
+	DataURL string `json:"dataUrl,omitempty"`
 }
 
 // PresetCape represents a predefined popular cape.
@@ -37,6 +38,7 @@ type PresetCape struct {
 	Name     string `json:"name"`
 	Category string `json:"category"`
 	URL      string `json:"url"`
+	DataURL  string `json:"dataUrl,omitempty"`
 }
 
 // Account represents a user profile in the launcher.

@@ -6,7 +6,6 @@ import TitleBar from './components/TitleBar.vue'
 import SideBar from './components/SideBar.vue'
 import Toasts from './components/Toasts.vue'
 import LaunchOverlay from './components/LaunchOverlay.vue'
-import AccountsModal from './components/AccountsModal.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import CreateInstanceModal from './components/CreateInstanceModal.vue'
 import HomePage from './pages/HomePage.vue'
@@ -14,6 +13,7 @@ import InstancesPage from './pages/InstancesPage.vue'
 import NewsPage from './pages/NewsPage.vue'
 import ModsPage from './pages/ModsPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
+import AccountsPage from './pages/AccountsPage.vue'
 import {GetState, RefreshVersions, GetNews, CheckLauncherUpdate} from '../wailsjs/go/main/App'
 import {EventsOn} from '../wailsjs/runtime/runtime'
 
@@ -143,10 +143,10 @@ watch(() => store.page, () => {
       <ModsPage :class="{active: store.page === 'mods'}"/>
       <NewsPage :class="{active: store.page === 'news'}"/>
       <SettingsPage :class="{active: store.page === 'settings'}"/>
+      <AccountsPage :class="{active: store.page === 'accounts'}"/>
     </main>
   </div>
   <CreateInstanceModal/>
-  <AccountsModal/>
   <LaunchOverlay/>
   <UpdateModal/>
   <Toasts/>

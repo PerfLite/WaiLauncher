@@ -73,6 +73,7 @@ export namespace auth {
 	    state: string;
 	    url: string;
 	    alias: string;
+	    dataUrl?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MojangCape(source);
@@ -84,6 +85,7 @@ export namespace auth {
 	        this.state = source["state"];
 	        this.url = source["url"];
 	        this.alias = source["alias"];
+	        this.dataUrl = source["dataUrl"];
 	    }
 	}
 	export class Account {
@@ -208,6 +210,7 @@ export namespace auth {
 	    name: string;
 	    category: string;
 	    url: string;
+	    dataUrl?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PresetCape(source);
@@ -219,6 +222,7 @@ export namespace auth {
 	        this.name = source["name"];
 	        this.category = source["category"];
 	        this.url = source["url"];
+	        this.dataUrl = source["dataUrl"];
 	    }
 	}
 
