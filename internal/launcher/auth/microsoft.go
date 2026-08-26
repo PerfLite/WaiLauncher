@@ -456,6 +456,7 @@ type MinecraftProfile struct {
 		URL     string `json:"url"`
 		Variant string `json:"variant"`
 	} `json:"skins"`
+	Capes []MojangCape `json:"capes"`
 }
 
 // GetMinecraftProfile fetches player UUID, nickname, and active skin.
@@ -553,9 +554,22 @@ func CompleteMicrosoftAuthFlow(ctx context.Context, msToken *MSTokenData) (*Acco
 	}
 
 	skinURL := ""
+	skinModel := "classic"
 	for _, s := range profile.Skins {
 		if s.State == "ACTIVE" || skinURL == "" {
 			skinURL = s.URL
+			if strings.EqualFold(s.Variant, "SLIM") {
+				skinModel = "slim"
+			} else {
+				skinModel = "classic"
+			}
+		}
+	}
+
+	capeURL := ""
+	for _, c := range profile.Capes {
+		if c.State == "ACTIVE" || capeURL == "" {
+			capeURL = c.URL
 		}
 	}
 
@@ -570,6 +584,9 @@ func CompleteMicrosoftAuthFlow(ctx context.Context, msToken *MSTokenData) (*Acco
 		Username:       profile.Name,
 		UUID:           formattedUUID,
 		SkinURL:        skinURL,
+		SkinModel:      skinModel,
+		CapeURL:        capeURL,
+		Capes:          profile.Capes,
 		AvatarURL:      AvatarURL(formattedUUID),
 		CreatedAt:      time.Now(),
 		LastUsed:       time.Now(),
@@ -621,7 +638,7 @@ func RefreshAccountTokens(ctx context.Context, clientID string, acc *Account) er
 		acc.XUID = xuid
 	}
 
-	// 3. Update profile details (skin, username)
+	// 3. Update profile details (skin, cape, username)
 	profile, err := GetMinecraftProfile(ctx, mcToken.AccessToken)
 	if err == nil {
 		acc.Username = profile.Name
@@ -631,7 +648,24 @@ func RefreshAccountTokens(ctx context.Context, clientID string, acc *Account) er
 		for _, s := range profile.Skins {
 			if s.State == "ACTIVE" || acc.SkinURL == "" {
 				acc.SkinURL = s.URL
+				if strings.EqualFold(s.Variant, "SLIM") {
+					acc.SkinModel = "slim"
+				} else {
+					acc.SkinModel = "classic"
+				}
 			}
+		}
+		acc.Capes = profile.Capes
+		activeCapeFound := false
+		for _, c := range profile.Capes {
+			if c.State == "ACTIVE" {
+				acc.CapeURL = c.URL
+				activeCapeFound = true
+				break
+			}
+		}
+		if !activeCapeFound && len(profile.Capes) == 0 {
+			acc.CapeURL = ""
 		}
 		acc.AvatarURL = AvatarURL(acc.UUID)
 	}

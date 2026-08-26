@@ -8,7 +8,8 @@ import {
   GetInstanceAllContent, ToggleInstanceContent, DeleteInstanceContent,
   CheckInstanceModUpdates, UpdateInstanceMod,
   GetInstanceWorlds, DeleteInstanceWorld,
-  SearchModrinthMods, InstallModrinthMod,
+  SearchModrinthMods, InstallModrinthMod, CheckModDependencies, InstallModWithDependencies,
+  SearchCurseForgeMods, InstallCurseForgeMod, CheckCurseForgeDependencies, InstallCurseForgeModWithDependencies,
   GetInstanceLogs, OpenInstanceDir, OpenInstanceSubFolder, ShowFileInExplorer, GetLoaderVersions,
   PickInstanceIcon,
   GetInstanceScreenshots, DeleteInstanceScreenshot, OpenScreenshotsFolder,
@@ -48,7 +49,72 @@ const importingInst = ref(false)
 const editSettingsOpen = ref(false)
 const editName = ref('')
 const editServer = ref('')
+const editVersion = ref('')
+const editLoader = ref('vanilla')
+const editLoaderVersion = ref('')
+const editLoaderVerList = ref([])
+const editLoaderVerLoading = ref(false)
+const editLoaderVerErr = ref(false)
+const editVerQuery = ref('')
 const savingSettings = ref(false)
+
+const loaders = [
+  { id: 'vanilla' },
+  { id: 'fabric' },
+  { id: 'forge' },
+  { id: 'neoforge' }
+]
+
+const typeNames = computed(() => ({
+  release: t('type.release'),
+  snapshot: t('type.snapshot'),
+  old_beta: t('type.old_beta'),
+  old_alpha: t('type.old_alpha'),
+}))
+
+const modalEditVersions = computed(() => {
+  const q = editVerQuery.value.trim().toLowerCase()
+  return store.versions.filter(v => {
+    if (!store.settings.showSnapshots && v.type !== 'release') return false
+    if (!q) return true
+    return v.id.toLowerCase().includes(q)
+  })
+})
+
+async function fetchEditLoaderVersions(loader, mcVer) {
+  if (loader === 'vanilla' || !mcVer) {
+    editLoaderVerList.value = []
+    editLoaderVersion.value = ''
+    editLoaderVerErr.value = false
+    return
+  }
+  editLoaderVerLoading.value = true
+  editLoaderVerErr.value = false
+  try {
+    const list = await GetLoaderVersions(loader, mcVer)
+    editLoaderVerList.value = list || []
+    if (list && list.length) {
+      if (!editLoaderVersion.value || !list.some(v => v.version === editLoaderVersion.value)) {
+        const rec = list.find(v => v.label === 'recommended')
+        editLoaderVersion.value = rec ? rec.version : list[0].version
+      }
+    } else {
+      editLoaderVersion.value = ''
+    }
+  } catch (e) {
+    editLoaderVerErr.value = true
+    editLoaderVerList.value = []
+    editLoaderVersion.value = ''
+  } finally {
+    editLoaderVerLoading.value = false
+  }
+}
+
+watch([editLoader, editVersion], ([ld, mc]) => {
+  if (editSettingsOpen.value) {
+    fetchEditLoaderVersions(ld, mc)
+  }
+})
 
 const logsText = ref('')
 const loadingLogs = ref(false)
@@ -75,6 +141,7 @@ const selectedFiles = ref({})
 
 /* In-place Find Projects View (Modrinth Style) */
 const viewMode = ref('manage') // 'manage' | 'browse'
+const browseSource = ref('modrinth') // 'modrinth' | 'curseforge'
 const browseCategory = ref('mod') // 'mod' | 'resourcepack' | 'shader'
 const browseQuery = ref('')
 const browseResults = ref([])
@@ -512,7 +579,7 @@ function closeBrowse() {
   viewMode.value = 'manage'
 }
 
-watch(browseCategory, () => {
+watch([browseCategory, browseSource], () => {
   if (viewMode.value === 'browse') {
     searchBrowseProjects()
   }
@@ -522,14 +589,26 @@ async function searchBrowseProjects() {
   if (!selectedInst.value) return
   loadingBrowse.value = true
   try {
-    const res = await SearchModrinthMods(
-      browseQuery.value,
-      browseCategory.value,
-      selectedInst.value.loader,
-      selectedInst.value.versionId,
-      0,
-      40
-    )
+    let res
+    if (browseSource.value === 'curseforge') {
+      res = await SearchCurseForgeMods(
+        browseQuery.value,
+        browseCategory.value,
+        selectedInst.value.loader,
+        selectedInst.value.versionId,
+        0,
+        40
+      )
+    } else {
+      res = await SearchModrinthMods(
+        browseQuery.value,
+        browseCategory.value,
+        selectedInst.value.loader,
+        selectedInst.value.versionId,
+        0,
+        40
+      )
+    }
     browseResults.value = (res && res.hits) ? res.hits : []
   } catch (e) {
     browseResults.value = []
@@ -548,12 +627,63 @@ function isModInstalled(hit) {
   })
 }
 
+// Dependency Resolver Dialog State
+const depModalOpen = ref(false)
+const depTargetHit = ref(null)
+const depList = ref([])
+const depSelectedUrls = ref([])
+
 async function installBrowseMod(hit) {
   if (!selectedInst.value) return
   const id = hit.project_id || hit.slug
+
+  if (browseCategory.value === 'mod') {
+    installingModMap.value[id] = true
+    try {
+      let deps
+      if (browseSource.value === 'curseforge') {
+        deps = await CheckCurseForgeDependencies(selectedInst.value.id, id)
+      } else {
+        deps = await CheckModDependencies(selectedInst.value.id, id)
+      }
+      const missing = (deps || []).filter(d => !d.alreadyInstalled)
+      if (missing.length > 0) {
+        depTargetHit.value = hit
+        depList.value = missing
+        const reqs = missing.filter(d => d.dependencyType === 'required').map(d => d.downloadUrl)
+        depSelectedUrls.value = reqs.length > 0 ? reqs : missing.map(d => d.downloadUrl)
+        depModalOpen.value = true
+        installingModMap.value[id] = false
+        return
+      }
+    } catch (e) {
+      console.warn('Dependency check error:', e)
+    }
+  }
+
+  await executeModInstall(hit, [])
+}
+
+async function executeModInstall(hit, depUrls) {
+  if (!selectedInst.value || !hit) return
+  const id = hit.project_id || hit.slug
   installingModMap.value[id] = true
+  depModalOpen.value = false
   try {
-    const mod = await InstallModrinthMod(selectedInst.value.id, id, browseCategory.value)
+    let mod
+    if (browseSource.value === 'curseforge') {
+      if (depUrls && depUrls.length > 0) {
+        mod = await InstallCurseForgeModWithDependencies(selectedInst.value.id, id, browseCategory.value, depUrls)
+      } else {
+        mod = await InstallCurseForgeMod(selectedInst.value.id, id, browseCategory.value)
+      }
+    } else {
+      if (depUrls && depUrls.length > 0) {
+        mod = await InstallModWithDependencies(selectedInst.value.id, id, browseCategory.value, depUrls)
+      } else {
+        mod = await InstallModrinthMod(selectedInst.value.id, id, browseCategory.value)
+      }
+    }
     if (mod) {
       await loadContent()
       toast(t('mods.added').replace('{m}', hit.title))
@@ -769,9 +899,14 @@ const settingsTab = ref('general') // 'general' | 'launch'
 
 function openEditSettings() {
   if (!selectedInst.value) return
-  editName.value = selectedInst.value.name
-  editServer.value = selectedInst.value.serverAddress || ''
   const ins = selectedInst.value
+  editName.value = ins.name
+  editServer.value = ins.serverAddress || ''
+  editVersion.value = ins.versionId || ''
+  editLoader.value = ins.loader || 'vanilla'
+  editLoaderVersion.value = ins.loaderVersion || ''
+  editVerQuery.value = ''
+  fetchEditLoaderVersions(editLoader.value, editVersion.value)
   editRAMGB.value = ins.ramMb ? Math.round(ins.ramMb / 1024) : 0
   editJavaPath.value = ins.javaPath || ''
   editJVMArgs.value = ins.jvmArgs || ''
@@ -794,14 +929,24 @@ async function saveInstanceSettings() {
   if (!selectedInst.value || savingSettings.value) return
   savingSettings.value = true
   try {
-    const updated = await UpdateInstanceSettings(selectedInst.value.id, editName.value, editServer.value)
+    const lv = editLoader.value === 'vanilla' ? '' : editLoaderVersion.value
+    const updated = await UpdateInstanceSettings(
+      selectedInst.value.id,
+      editName.value,
+      editServer.value,
+      editVersion.value,
+      editLoader.value,
+      lv
+    )
     if (updated) {
       selectedInst.value.name = updated.name
       selectedInst.value.serverAddress = updated.serverAddress
+      selectedInst.value.versionId = updated.versionId
+      selectedInst.value.loader = updated.loader
+      selectedInst.value.loaderVersion = updated.loaderVersion
       const inStore = store.instances.find(i => i.id === updated.id)
       if (inStore) {
-        inStore.name = updated.name
-        inStore.serverAddress = updated.serverAddress
+        Object.assign(inStore, updated)
       }
     }
     const ramMB = editRAMGB.value > 0 ? editRAMGB.value * 1024 : 0
@@ -855,29 +1000,48 @@ async function saveInstanceSettings() {
           </div>
         </div>
 
-        <!-- Browse Category Pills -->
+        <!-- Browse Category Pills & Source Switcher -->
         <div class="mr-browse-cats">
-          <button
-            class="mr-browse-cat-pill"
-            :class="{active: browseCategory === 'mod'}"
-            @click="browseCategory = 'mod'"
-          >
-            {{ t('cat.mods') }}
-          </button>
-          <button
-            class="mr-browse-cat-pill"
-            :class="{active: browseCategory === 'resourcepack'}"
-            @click="browseCategory = 'resourcepack'"
-          >
-            {{ t('cat.resourcepacks') }}
-          </button>
-          <button
-            class="mr-browse-cat-pill"
-            :class="{active: browseCategory === 'shader'}"
-            @click="browseCategory = 'shader'"
-          >
-            {{ t('cat.shaders') }}
-          </button>
+          <div class="mr-source-switch">
+            <button
+              class="mr-source-btn"
+              :class="{active: browseSource === 'modrinth'}"
+              @click="browseSource = 'modrinth'"
+            >
+              Modrinth
+            </button>
+            <button
+              class="mr-source-btn"
+              :class="{active: browseSource === 'curseforge'}"
+              @click="browseSource = 'curseforge'"
+            >
+              CurseForge
+            </button>
+          </div>
+
+          <div class="mr-cat-pills-group">
+            <button
+              class="mr-browse-cat-pill"
+              :class="{active: browseCategory === 'mod'}"
+              @click="browseCategory = 'mod'"
+            >
+              {{ t('cat.mods') }}
+            </button>
+            <button
+              class="mr-browse-cat-pill"
+              :class="{active: browseCategory === 'resourcepack'}"
+              @click="browseCategory = 'resourcepack'"
+            >
+              {{ t('cat.resourcepacks') }}
+            </button>
+            <button
+              class="mr-browse-cat-pill"
+              :class="{active: browseCategory === 'shader'}"
+              @click="browseCategory = 'shader'"
+            >
+              {{ t('cat.shaders') }}
+            </button>
+          </div>
         </div>
 
         <!-- Browse Search & Controls Bar -->
@@ -888,7 +1052,7 @@ async function saveInstanceSettings() {
               type="text"
               v-model="browseQuery"
               @input="onBrowseInput"
-              :placeholder="t('mr.searchOnModrinth')"
+              :placeholder="browseSource === 'curseforge' ? 'Поиск на CurseForge…' : t('mr.searchOnModrinth')"
             >
             <button v-if="browseQuery" class="search-clear" @click="browseQuery = ''; searchBrowseProjects()">✕</button>
           </div>
@@ -1698,15 +1862,15 @@ async function saveInstanceSettings() {
         <!-- Tabs -->
         <div class="inst-settings-tabs">
           <button class="inst-settings-tab" :class="{active: settingsTab === 'general'}" @click="settingsTab = 'general'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M19.1 4.9 17 7 M7 17l-2.1 2.1"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             <span>{{ t('inst.tabGeneral') || 'Основное' }}</span>
           </button>
           <button class="inst-settings-tab" :class="{active: settingsTab === 'launch'}" @click="settingsTab = 'launch'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
             <span>{{ t('inst.tabLaunch') || 'Запуск' }}</span>
           </button>
           <button class="inst-settings-tab" :class="{active: settingsTab === 'actions'}" @click="settingsTab = 'actions'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
             <span>{{ t('inst.tabActions') || 'Действия' }}</span>
           </button>
         </div>
@@ -1715,12 +1879,68 @@ async function saveInstanceSettings() {
         <div class="modal-body inst-settings-body" v-show="settingsTab === 'general'">
           <div class="fld-group">
             <label class="fld-label">{{ t('inst.name') }}</label>
-            <input class="txt-in" v-model="editName" :placeholder="t('inst.namePh')">
+            <input class="txt-in" v-model="editName" :placeholder="t('inst.namePh')" maxlength="40">
           </div>
+
+          <div class="fld-group">
+            <label class="fld-label">{{ t('inst.loader') }}</label>
+            <div class="loader-row">
+              <button
+                v-for="ld in loaders"
+                :key="ld.id"
+                class="loader-tile"
+                :class="{on: editLoader === ld.id}"
+                @click="editLoader = ld.id"
+              >
+                <b>{{ t('loader.' + ld.id) }}</b>
+              </button>
+            </div>
+          </div>
+
+          <template v-if="editLoader !== 'vanilla'">
+            <div class="fld-group">
+              <label class="fld-label">{{ t('inst.loaderVersion') }}</label>
+              <div v-if="editLoaderVerLoading" class="loader-ver-status">{{ t('inst.loaderLoading') }}</div>
+              <div v-else-if="editLoaderVerErr" class="loader-ver-status err">{{ t('inst.loaderErr') }}</div>
+              <ul v-else-if="editLoaderVerList.length" class="ver-pick-list short">
+                <li
+                  v-for="lv in editLoaderVerList.slice(0, 30)"
+                  :key="lv.version"
+                  :class="{sel: lv.version === editLoaderVersion}"
+                  @click="editLoaderVersion = lv.version"
+                >
+                  {{ lv.version }}
+                  <em v-if="lv.label" class="dd-tag" :class="{rel: lv.label === 'recommended', snap: lv.label === 'latest'}">
+                    {{ t('inst.' + (lv.label === 'recommended' ? 'rec' : lv.label === 'latest' ? 'latest' : 'beta')) }}
+                  </em>
+                </li>
+              </ul>
+              <div v-else class="loader-ver-status">{{ t('home.noData') }}</div>
+            </div>
+          </template>
+
+          <div class="fld-group">
+            <label class="fld-label">{{ t('inst.version') }}</label>
+            <input class="txt-in" v-model="editVerQuery" :placeholder="t('inst.search')">
+            <ul class="ver-pick-list short">
+              <li
+                v-for="v in modalEditVersions"
+                :key="v.id"
+                :class="{sel: v.id === editVersion}"
+                @click="editVersion = v.id"
+              >
+                {{ v.id }}
+                <em class="dd-tag" :class="{rel: v.type === 'release', snap: v.type === 'snapshot'}">
+                  {{ v.installed ? '✓ ' : '' }}{{ typeNames[v.type] || v.type }}
+                </em>
+              </li>
+              <li v-if="!modalEditVersions.length" style="cursor:default;color:var(--muted)">{{ t('home.noData') }}</li>
+            </ul>
+          </div>
+
           <div class="fld-group">
             <label class="fld-label">{{ t('inst.serverAddress') }}</label>
             <input class="txt-in" v-model="editServer" :placeholder="t('inst.serverAddressPh')">
-            <span style="font-size: 12px; color: var(--muted); margin-top: 4px;">{{ t('inst.serverAddressHint') }}</span>
           </div>
         </div>
 
@@ -1750,18 +1970,30 @@ async function saveInstanceSettings() {
             <input class="txt-in full-w mono-in" v-model="editJVMArgs" :placeholder="t('inst.jvmArgsPh')">
           </div>
 
-          <div class="fld-group">
-            <label class="set-name">{{ t('settings.windowOverride') }}</label>
-            <label class="switch"><input type="checkbox" v-model="editUseCustomWindow"><i></i></label>
-            <template v-if="editUseCustomWindow">
-              <div class="launch-cfg-win-row">
-                <label class="set-name">{{ t('settings.fullscreen') }}</label>
-                <label class="switch"><input type="checkbox" v-model="editFullscreen"><i></i></label>
+          <div class="launch-cfg-toggle-card">
+            <div class="launch-cfg-toggle-row">
+              <div class="launch-cfg-toggle-info">
+                <span class="launch-cfg-toggle-name">{{ t('settings.windowOverride') }}</span>
+                <span class="launch-cfg-toggle-desc">{{ t('settings.windowOverrideDesc') }}</span>
               </div>
-              <div class="launch-cfg-win-row" v-if="!editFullscreen">
-                <input type="number" class="txt-in num-in" v-model.number="editWinW" min="320" max="7680" placeholder="854">
-                <span class="launch-cfg-mult">×</span>
-                <input type="number" class="txt-in num-in" v-model.number="editWinH" min="240" max="4320" placeholder="480">
+              <label class="switch"><input type="checkbox" v-model="editUseCustomWindow"><i></i></label>
+            </div>
+
+            <template v-if="editUseCustomWindow">
+              <div class="launch-cfg-sub-panel">
+                <div class="launch-cfg-toggle-row">
+                  <div class="launch-cfg-toggle-info">
+                    <span class="launch-cfg-toggle-name">{{ t('settings.fullscreen') }}</span>
+                    <span class="launch-cfg-toggle-desc">{{ t('settings.fullscreenDesc') }}</span>
+                  </div>
+                  <label class="switch"><input type="checkbox" v-model="editFullscreen"><i></i></label>
+                </div>
+                <div class="launch-cfg-win-row" v-if="!editFullscreen">
+                  <span class="launch-cfg-toggle-name" style="margin-right:auto">{{ t('settings.res') }}</span>
+                  <input type="number" class="txt-in num-in" v-model.number="editWinW" min="320" max="7680" placeholder="854">
+                  <span class="launch-cfg-mult">×</span>
+                  <input type="number" class="txt-in num-in" v-model.number="editWinH" min="240" max="4320" placeholder="480">
+                </div>
               </div>
             </template>
           </div>
@@ -1804,6 +2036,77 @@ async function saveInstanceSettings() {
           <button class="btn-sec" @click="editSettingsOpen = false">{{ t('inst.cancel') }}</button>
           <button class="btn-primary" :disabled="savingSettings" @click="saveInstanceSettings">
             {{ savingSettings ? 'Сохранение…' : t('inst.saveSettings') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dependency Resolver Modal -->
+    <div v-if="depModalOpen" class="modal-root">
+      <div class="modal-backdrop" @click="depModalOpen = false"></div>
+      <div class="modal-box dep-modal-box">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div class="modal-icon dep-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m7.5 4.27 9 5.15"/>
+                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+                <path d="m3.3 7 8.7 5 8.7-5"/>
+                <path d="M12 22V12"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="modal-title">{{ t('deps.title') || 'Зависимости мода' }}</h2>
+              <div class="modal-subtitle">
+                {{ (t('deps.subtitle') || 'Для работы «{m}» требуются следующие библиотеки:').replace('{m}', depTargetHit?.title || '') }}
+              </div>
+            </div>
+          </div>
+          <button class="modal-close" @click="depModalOpen = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="modal-body dep-modal-body">
+          <div class="dep-list">
+            <label
+              v-for="dep in depList"
+              :key="dep.projectId"
+              class="dep-item-card"
+              :class="{ checked: depSelectedUrls.includes(dep.downloadUrl) }"
+            >
+              <input
+                type="checkbox"
+                :value="dep.downloadUrl"
+                v-model="depSelectedUrls"
+                class="dep-checkbox"
+              >
+              <img v-if="dep.iconUrl" :src="dep.iconUrl" class="dep-item-icon" alt="icon">
+              <div v-else class="dep-item-icon fallback">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="5" y="5" rx="2"/></svg>
+              </div>
+              <div class="dep-item-info">
+                <div class="dep-item-title-row">
+                  <span class="dep-item-title">{{ dep.projectTitle }}</span>
+                  <span class="dep-badge" :class="dep.dependencyType">
+                    {{ dep.dependencyType === 'required' ? (t('deps.required') || 'Обязательно') : (t('deps.optional') || 'Опционально') }}
+                  </span>
+                </div>
+                <span class="dep-item-fn">{{ dep.fileName }}</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-foot dep-modal-foot">
+          <button class="btn-sec" @click="executeModInstall(depTargetHit, [])">
+            {{ t('deps.onlyMod') || 'Только этот мод' }}
+          </button>
+          <button
+            class="btn-primary"
+            @click="executeModInstall(depTargetHit, depSelectedUrls)"
+          >
+            {{ t('deps.installAll') || 'Установить всё' }} ({{ depSelectedUrls.length + 1 }})
           </button>
         </div>
       </div>

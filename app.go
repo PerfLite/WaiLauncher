@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,6 +19,13 @@ import (
 )
 
 const launcherVersion = "1.0.1"
+
+// FilePickResult holds local file path and base64 data URL from file dialog.
+type FilePickResult struct {
+	FilePath string `json:"filePath"`
+	DataURL  string `json:"dataUrl"`
+	FileName string `json:"fileName"`
+}
 
 // VersionEntry is one row of the frontend version dropdown.
 type VersionEntry struct {
@@ -743,6 +751,173 @@ func (a *App) RefreshAccount(id string) (*auth.Account, error) {
 
 	return target, nil
 }
+
+// PickSkinFile opens a dialog to select a skin PNG file.
+func (a *App) PickSkinFile() (*FilePickResult, error) {
+	p, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Выберите файл скина (.png)",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Minecraft Skin (*.png)", Pattern: "*.png"},
+		},
+	})
+	if err != nil || p == "" {
+		return nil, err
+	}
+	bytes, err := os.ReadFile(p)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(bytes)
+	return &FilePickResult{
+		FilePath: p,
+		DataURL:  dataURL,
+		FileName: filepath.Base(p),
+	}, nil
+}
+
+// PickCapeFile opens a dialog to select a cape PNG file.
+func (a *App) PickCapeFile() (*FilePickResult, error) {
+	p, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Выберите файл плаща (.png)",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Minecraft Cape (*.png)", Pattern: "*.png"},
+		},
+	})
+	if err != nil || p == "" {
+		return nil, err
+	}
+	bytes, err := os.ReadFile(p)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(bytes)
+	return &FilePickResult{
+		FilePath: p,
+		DataURL:  dataURL,
+		FileName: filepath.Base(p),
+	}, nil
+}
+
+// SetAccountSkin updates the skin for the given account.
+func (a *App) SetAccountSkin(accountID, filePathOrDataURL, variant string) (*auth.Account, error) {
+	if a.accounts == nil {
+		return nil, fmt.Errorf("accounts manager not initialized")
+	}
+	acc, err := a.accounts.GetAccount(accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	variant = strings.ToLower(strings.TrimSpace(variant))
+	if variant != "slim" {
+		variant = "classic"
+	}
+
+	var rawBytes []byte
+	var filename string
+
+	if strings.HasPrefix(filePathOrDataURL, "data:image") {
+		parts := strings.SplitN(filePathOrDataURL, ",", 2)
+		if len(parts) == 2 {
+			rawBytes, _ = base64.StdEncoding.DecodeString(parts[1])
+		}
+		filename = "skin.png"
+	} else if _, statErr := os.Stat(filePathOrDataURL); statErr == nil {
+		rawBytes, _ = os.ReadFile(filePathOrDataURL)
+		filename = filepath.Base(filePathOrDataURL)
+	}
+
+	if acc.Type == auth.AccountTypeMicrosoft && acc.MicrosoftToken != nil && len(rawBytes) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := a.accounts.EnsureValidAccount(ctx, acc); err != nil {
+			return nil, fmt.Errorf("auth error: %w", err)
+		}
+		if err := auth.UploadSkinToMojang(ctx, acc.MinecraftToken.AccessToken, rawBytes, filename, variant); err != nil {
+			return nil, fmt.Errorf("mojang upload error: %w", err)
+		}
+		// Refresh profile to get updated official SkinURL
+		if prof, err := auth.GetMinecraftProfile(ctx, acc.MinecraftToken.AccessToken); err == nil {
+			for _, s := range prof.Skins {
+				if s.State == "ACTIVE" || acc.SkinURL == "" {
+					acc.SkinURL = s.URL
+				}
+			}
+			acc.SkinModel = variant
+			return a.accounts.UpdateSkin(acc.ID, acc.SkinURL, variant)
+		}
+	}
+
+	// For Offline or local fallback: store as dataURL or URL
+	skinVal := filePathOrDataURL
+	if len(rawBytes) > 0 && !strings.HasPrefix(skinVal, "data:image") {
+		skinVal = "data:image/png;base64," + base64.StdEncoding.EncodeToString(rawBytes)
+	}
+
+	return a.accounts.UpdateSkin(acc.ID, skinVal, variant)
+}
+
+// SetAccountCape updates or activates a cape for the given account.
+func (a *App) SetAccountCape(accountID, capeURLOrDataURL, capeID string) (*auth.Account, error) {
+	if a.accounts == nil {
+		return nil, fmt.Errorf("accounts manager not initialized")
+	}
+	acc, err := a.accounts.GetAccount(accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	if acc.Type == auth.AccountTypeMicrosoft && acc.MicrosoftToken != nil && capeID != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := a.accounts.EnsureValidAccount(ctx, acc); err != nil {
+			return nil, fmt.Errorf("auth error: %w", err)
+		}
+		if err := auth.SetActiveMojangCape(ctx, acc.MinecraftToken.AccessToken, capeID); err != nil {
+			return nil, fmt.Errorf("mojang cape error: %w", err)
+		}
+		if prof, err := auth.GetMinecraftProfile(ctx, acc.MinecraftToken.AccessToken); err == nil {
+			acc.Capes = prof.Capes
+			for _, c := range prof.Capes {
+				if c.ID == capeID || c.State == "ACTIVE" {
+					return a.accounts.UpdateCape(acc.ID, c.URL, prof.Capes)
+				}
+			}
+		}
+	}
+
+	return a.accounts.UpdateCape(acc.ID, capeURLOrDataURL, nil)
+}
+
+// ClearAccountCape removes/hides the cape from the given account.
+func (a *App) ClearAccountCape(accountID string) (*auth.Account, error) {
+	if a.accounts == nil {
+		return nil, fmt.Errorf("accounts manager not initialized")
+	}
+	acc, err := a.accounts.GetAccount(accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	if acc.Type == auth.AccountTypeMicrosoft && acc.MicrosoftToken != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := a.accounts.EnsureValidAccount(ctx, acc); err == nil {
+			_ = auth.HideMojangCape(ctx, acc.MinecraftToken.AccessToken)
+			if prof, err := auth.GetMinecraftProfile(ctx, acc.MinecraftToken.AccessToken); err == nil {
+				return a.accounts.UpdateCape(acc.ID, "", prof.Capes)
+			}
+		}
+	}
+
+	return a.accounts.UpdateCape(acc.ID, "", nil)
+}
+
+// GetPresetCapes returns curated list of preset capes.
+func (a *App) GetPresetCapes() []auth.PresetCape {
+	return auth.GetPresetCapes()
+}
+
 
 // ---- window controls for the custom titlebar ----
 

@@ -302,3 +302,56 @@ func (m *AccountManager) EnsureValidAccount(ctx context.Context, acc *Account) e
 
 	return nil
 }
+
+// GetAccount finds an account by ID.
+func (m *AccountManager) GetAccount(id string) (*Account, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, a := range m.data.Accounts {
+		if a.ID == id {
+			cpy := a
+			return &cpy, nil
+		}
+	}
+	return nil, fmt.Errorf("account not found: %s", id)
+}
+
+// UpdateSkin updates the skin URL and model for an account.
+func (m *AccountManager) UpdateSkin(id, skinURL, skinModel string) (*Account, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i := range m.data.Accounts {
+		if m.data.Accounts[i].ID == id {
+			m.data.Accounts[i].SkinURL = skinURL
+			if skinModel != "" {
+				m.data.Accounts[i].SkinModel = skinModel
+			}
+			cpy := m.data.Accounts[i]
+			_ = m.saveLocked()
+			return &cpy, nil
+		}
+	}
+	return nil, fmt.Errorf("account not found: %s", id)
+}
+
+// UpdateCape updates the cape URL and capes list for an account.
+func (m *AccountManager) UpdateCape(id, capeURL string, capes []MojangCape) (*Account, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i := range m.data.Accounts {
+		if m.data.Accounts[i].ID == id {
+			m.data.Accounts[i].CapeURL = capeURL
+			if capes != nil {
+				m.data.Accounts[i].Capes = capes
+			}
+			cpy := m.data.Accounts[i]
+			_ = m.saveLocked()
+			return &cpy, nil
+		}
+	}
+	return nil, fmt.Errorf("account not found: %s", id)
+}
+

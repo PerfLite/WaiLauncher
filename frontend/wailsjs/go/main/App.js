@@ -14,6 +14,10 @@ export function CancelPlay() {
   return window['go']['main']['App']['CancelPlay']();
 }
 
+export function CheckCurseForgeDependencies(arg1, arg2) {
+  return window['go']['main']['App']['CheckCurseForgeDependencies'](arg1, arg2);
+}
+
 export function CheckInstanceModUpdates(arg1) {
   return window['go']['main']['App']['CheckInstanceModUpdates'](arg1);
 }
@@ -24,6 +28,14 @@ export function CheckJavaUpdates() {
 
 export function CheckLauncherUpdate() {
   return window['go']['main']['App']['CheckLauncherUpdate']();
+}
+
+export function CheckModDependencies(arg1, arg2) {
+  return window['go']['main']['App']['CheckModDependencies'](arg1, arg2);
+}
+
+export function ClearAccountCape(arg1) {
+  return window['go']['main']['App']['ClearAccountCape'](arg1);
 }
 
 export function CloneInstance(arg1) {
@@ -118,6 +130,10 @@ export function GetNews() {
   return window['go']['main']['App']['GetNews']();
 }
 
+export function GetPresetCapes() {
+  return window['go']['main']['App']['GetPresetCapes']();
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
@@ -134,8 +150,20 @@ export function ImportInstanceFile(arg1) {
   return window['go']['main']['App']['ImportInstanceFile'](arg1);
 }
 
+export function InstallCurseForgeMod(arg1, arg2, arg3) {
+  return window['go']['main']['App']['InstallCurseForgeMod'](arg1, arg2, arg3);
+}
+
+export function InstallCurseForgeModWithDependencies(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['InstallCurseForgeModWithDependencies'](arg1, arg2, arg3, arg4);
+}
+
 export function InstallJavaRuntime(arg1) {
   return window['go']['main']['App']['InstallJavaRuntime'](arg1);
+}
+
+export function InstallModWithDependencies(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['InstallModWithDependencies'](arg1, arg2, arg3, arg4);
 }
 
 export function InstallModpack(arg1, arg2, arg3) {
@@ -170,6 +198,10 @@ export function OpenURL(arg1) {
   return window['go']['main']['App']['OpenURL'](arg1);
 }
 
+export function PickCapeFile() {
+  return window['go']['main']['App']['PickCapeFile']();
+}
+
 export function PickDataDir() {
   return window['go']['main']['App']['PickDataDir']();
 }
@@ -180,6 +212,10 @@ export function PickInstanceIcon(arg1) {
 
 export function PickJavaPath() {
   return window['go']['main']['App']['PickJavaPath']();
+}
+
+export function PickSkinFile() {
+  return window['go']['main']['App']['PickSkinFile']();
 }
 
 export function Play(arg1) {
@@ -206,6 +242,10 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
+export function SearchCurseForgeMods(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['SearchCurseForgeMods'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function SearchModpacks(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['SearchModpacks'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
@@ -216,6 +256,14 @@ export function SearchModrinthMods(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function SelectAccount(arg1) {
   return window['go']['main']['App']['SelectAccount'](arg1);
+}
+
+export function SetAccountCape(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetAccountCape'](arg1, arg2, arg3);
+}
+
+export function SetAccountSkin(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetAccountSkin'](arg1, arg2, arg3);
 }
 
 export function SetActiveInstance(arg1) {
@@ -258,8 +306,8 @@ export function UpdateInstanceMod(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateInstanceMod'](arg1, arg2, arg3, arg4);
 }
 
-export function UpdateInstanceSettings(arg1, arg2, arg3) {
-  return window['go']['main']['App']['UpdateInstanceSettings'](arg1, arg2, arg3);
+export function UpdateInstanceSettings(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['UpdateInstanceSettings'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function WindowClose() {

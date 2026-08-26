@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -513,6 +514,225 @@ func (a *App) InstallModrinthMod(instanceID, projectIDOrSlug, projectType string
 	}, nil
 }
 
+// CheckModDependencies checks if the mod has any missing required or optional dependencies.
+func (a *App) CheckModDependencies(instanceID, projectIDOrSlug string) ([]launcher.ResolvedDependency, error) {
+	var targetInst *Instance
+	for _, inst := range a.loadInstances() {
+		if inst.ID == instanceID {
+			targetInst = &inst
+			break
+		}
+	}
+	if targetInst == nil {
+		return nil, fmt.Errorf("instance not found")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	ld := targetInst.Loader
+	versions, err := a.l.GetModrinthProjectVersions(ctx, projectIDOrSlug, ld, targetInst.VersionID)
+	if err != nil || len(versions) == 0 {
+		return nil, nil
+	}
+
+	var installedFiles []string
+	modsDir := filepath.Join(a.instanceGameDir(*targetInst), "mods")
+	if entries, err := os.ReadDir(modsDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				installedFiles = append(installedFiles, e.Name())
+			}
+		}
+	}
+
+	return a.l.ResolveModDependencies(ctx, versions[0].ID, ld, targetInst.VersionID, installedFiles)
+}
+
+// InstallModWithDependencies installs a main mod and any selected dependency URLs into the instance's mods folder.
+func (a *App) InstallModWithDependencies(instanceID, projectIDOrSlug, projectType string, depDownloadUrls []string) (*launcher.ModItem, error) {
+	var targetInst *Instance
+	for _, inst := range a.loadInstances() {
+		if inst.ID == instanceID {
+			targetInst = &inst
+			break
+		}
+	}
+	if targetInst == nil {
+		return nil, fmt.Errorf("instance not found")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	modsDir := filepath.Join(a.instanceGameDir(*targetInst), "mods")
+	_ = os.MkdirAll(modsDir, 0o755)
+
+	for _, rawURL := range depDownloadUrls {
+		if strings.TrimSpace(rawURL) == "" {
+			continue
+		}
+		u, err := url.Parse(rawURL)
+		if err != nil {
+			continue
+		}
+		fn := filepath.Base(u.Path)
+		if fn == "" || fn == "." || fn == "/" {
+			continue
+		}
+		dest := filepath.Join(modsDir, fn)
+		_ = a.l.DownloadModFile(ctx, rawURL, dest)
+	}
+
+	return a.InstallModrinthMod(instanceID, projectIDOrSlug, projectType)
+}
+
+// SearchCurseForgeMods searches for projects (mods, resourcepacks, shaders) on CurseForge API.
+func (a *App) SearchCurseForgeMods(query, projectType, loader, mcVersion string, offset, limit int) (*launcher.ModrinthSearchResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	return a.l.SearchCurseForge(ctx, query, projectType, loader, mcVersion, offset, limit)
+}
+
+// InstallCurseForgeMod installs the latest compatible project version from CurseForge directly into the instance.
+func (a *App) InstallCurseForgeMod(instanceID, modIDStr, projectType string) (*launcher.ModItem, error) {
+	var targetInst *Instance
+	for _, inst := range a.loadInstances() {
+		if inst.ID == instanceID {
+			targetInst = &inst
+			break
+		}
+	}
+	if targetInst == nil {
+		return nil, fmt.Errorf("instance not found")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	modID, err := launcher.ParseCurseForgeID(modIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid curseforge mod id: %s", modIDStr)
+	}
+
+	ld := targetInst.Loader
+	if projectType == "resourcepack" || projectType == "shader" {
+		ld = ""
+	}
+
+	files, err := a.l.GetCurseForgeModFiles(ctx, modID, ld, targetInst.VersionID)
+	if err != nil {
+		return nil, fmt.Errorf("lookup curseforge files: %w", err)
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no compatible versions found on CurseForge for Minecraft %s", targetInst.VersionID)
+	}
+
+	chosenFile := files[0]
+	if chosenFile.DownloadURL == "" {
+		chosenFile.DownloadURL = fmt.Sprintf("https://edge.forgecdn.net/files/%d/%d/%s", chosenFile.ID/1000, chosenFile.ID%1000, url.PathEscape(chosenFile.FileName))
+	}
+
+	subFolder := "mods"
+	switch projectType {
+	case "resourcepack":
+		subFolder = "resourcepacks"
+	case "shader":
+		subFolder = "shaderpacks"
+	}
+
+	targetDir := filepath.Join(a.instanceGameDir(*targetInst), subFolder)
+	destPath := filepath.Join(targetDir, chosenFile.FileName)
+	if err := a.l.DownloadModFile(ctx, chosenFile.DownloadURL, destPath); err != nil {
+		return nil, fmt.Errorf("download curseforge file: %w", err)
+	}
+	cleanName := strings.TrimSuffix(chosenFile.FileName, filepath.Ext(chosenFile.FileName))
+	return &launcher.ModItem{
+		Filename: chosenFile.FileName,
+		Name:     cleanName,
+		Enabled:  true,
+		Size:     chosenFile.FileLength,
+		ModTime:  time.Now().Unix(),
+	}, nil
+}
+
+// CheckCurseForgeDependencies checks if the CurseForge mod has any missing dependencies.
+func (a *App) CheckCurseForgeDependencies(instanceID, modIDStr string) ([]launcher.ResolvedDependency, error) {
+	var targetInst *Instance
+	for _, inst := range a.loadInstances() {
+		if inst.ID == instanceID {
+			targetInst = &inst
+			break
+		}
+	}
+	if targetInst == nil {
+		return nil, fmt.Errorf("instance not found")
+	}
+
+	modID, err := launcher.ParseCurseForgeID(modIDStr)
+	if err != nil {
+		return nil, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	ld := targetInst.Loader
+	files, err := a.l.GetCurseForgeModFiles(ctx, modID, ld, targetInst.VersionID)
+	if err != nil || len(files) == 0 {
+		return nil, nil
+	}
+
+	var installedFiles []string
+	modsDir := filepath.Join(a.instanceGameDir(*targetInst), "mods")
+	if entries, err := os.ReadDir(modsDir); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				installedFiles = append(installedFiles, e.Name())
+			}
+		}
+	}
+
+	return a.l.ResolveCurseForgeDependencies(ctx, modID, &files[0], ld, targetInst.VersionID, installedFiles)
+}
+
+// InstallCurseForgeModWithDependencies installs a CurseForge mod and its dependencies.
+func (a *App) InstallCurseForgeModWithDependencies(instanceID, modIDStr, projectType string, depDownloadUrls []string) (*launcher.ModItem, error) {
+	var targetInst *Instance
+	for _, inst := range a.loadInstances() {
+		if inst.ID == instanceID {
+			targetInst = &inst
+			break
+		}
+	}
+	if targetInst == nil {
+		return nil, fmt.Errorf("instance not found")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	modsDir := filepath.Join(a.instanceGameDir(*targetInst), "mods")
+	_ = os.MkdirAll(modsDir, 0o755)
+
+	for _, rawURL := range depDownloadUrls {
+		if strings.TrimSpace(rawURL) == "" {
+			continue
+		}
+		u, err := url.Parse(rawURL)
+		if err != nil {
+			continue
+		}
+		fn := filepath.Base(u.Path)
+		if fn == "" || fn == "." || fn == "/" {
+			continue
+		}
+		dest := filepath.Join(modsDir, fn)
+		_ = a.l.DownloadModFile(ctx, rawURL, dest)
+	}
+
+	return a.InstallCurseForgeMod(instanceID, modIDStr, projectType)
+}
+
 // GetInstanceLogs reads the latest log of the instance.
 func (a *App) GetInstanceLogs(instanceID string) (string, error) {
 	for _, inst := range a.loadInstances() {
@@ -809,8 +1029,8 @@ func (a *App) PickInstanceIcon(instanceID string) (string, error) {
 	return base64Icon, nil
 }
 
-// UpdateInstanceSettings updates name, server address, etc.
-func (a *App) UpdateInstanceSettings(instanceID, name, serverAddress string) (*Instance, error) {
+// UpdateInstanceSettings updates name, server address, version, loader, and loader version.
+func (a *App) UpdateInstanceSettings(instanceID, name, serverAddress, versionID, loader, loaderVersion string) (*Instance, error) {
 	list := a.loadInstances()
 	var target *Instance
 	for i := range list {
@@ -827,6 +1047,19 @@ func (a *App) UpdateInstanceSettings(instanceID, name, serverAddress string) (*I
 		target.Name = name
 	}
 	target.ServerAddress = strings.TrimSpace(serverAddress)
+	versionID = strings.TrimSpace(versionID)
+	if versionID != "" {
+		target.VersionID = versionID
+	}
+	loader = strings.TrimSpace(loader)
+	if loader != "" {
+		target.Loader = loader
+		if loader == "vanilla" {
+			target.LoaderVersion = ""
+		} else {
+			target.LoaderVersion = strings.TrimSpace(loaderVersion)
+		}
+	}
 	_ = a.saveInstances(list)
 	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
 	return target, nil

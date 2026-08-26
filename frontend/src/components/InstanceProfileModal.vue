@@ -8,6 +8,8 @@ import {
   DeleteMod,
   SearchModrinthMods,
   InstallModrinthMod,
+  SearchCurseForgeMods,
+  InstallCurseForgeMod,
   GetInstanceLogs,
   OpenInstanceDir
 } from '../../wailsjs/go/main/App'
@@ -20,6 +22,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'play'])
 
 const tab = ref('mods') // 'mods' | 'catalog' | 'logs'
+const catalogSource = ref('modrinth') // 'modrinth' | 'curseforge'
 const installedMods = ref([])
 const loadingMods = ref(false)
 
@@ -110,17 +113,36 @@ function onCatalogInput() {
   }, 400)
 }
 
+watch(catalogSource, () => {
+  if (tab.value === 'catalog') {
+    searchCatalog()
+  }
+})
+
 async function searchCatalog() {
   if (!props.inst || isVanilla.value) return
   loadingCatalog.value = true
   try {
-    const res = await SearchModrinthMods(
-      catalogQuery.value,
-      props.inst.loader,
-      props.inst.versionId,
-      0,
-      30
-    )
+    let res
+    if (catalogSource.value === 'curseforge') {
+      res = await SearchCurseForgeMods(
+        catalogQuery.value,
+        'mod',
+        props.inst.loader,
+        props.inst.versionId,
+        0,
+        30
+      )
+    } else {
+      res = await SearchModrinthMods(
+        catalogQuery.value,
+        'mod',
+        props.inst.loader,
+        props.inst.versionId,
+        0,
+        30
+      )
+    }
     catalogResults.value = (res && res.hits) ? res.hits : []
   } catch (e) {
     toast(t('inst.err') + e, true)
@@ -144,7 +166,12 @@ async function installMod(hit) {
   const id = hit.project_id || hit.slug
   installingMap.value[id] = true
   try {
-    const mod = await InstallModrinthMod(props.inst.id, id)
+    let mod
+    if (catalogSource.value === 'curseforge') {
+      mod = await InstallCurseForgeMod(props.inst.id, id, 'mod')
+    } else {
+      mod = await InstallModrinthMod(props.inst.id, id, 'mod')
+    }
     if (mod) {
       installedMods.value.push(mod)
       toast(t('mods.added').replace('{m}', hit.title))
@@ -305,12 +332,28 @@ function formatNumber(num) {
           </div>
         </div>
 
-        <!-- TAB 2: MODRINTH CATALOG -->
+        <!-- TAB 2: MODRINTH & CURSEFORGE CATALOG -->
         <div v-if="tab === 'catalog'" class="tab-pane">
           <div class="tab-toolbar">
+            <div class="mr-source-switch" style="margin-right: 8px;">
+              <button
+                class="mr-source-btn"
+                :class="{active: catalogSource === 'modrinth'}"
+                @click="catalogSource = 'modrinth'"
+              >
+                Modrinth
+              </button>
+              <button
+                class="mr-source-btn"
+                :class="{active: catalogSource === 'curseforge'}"
+                @click="catalogSource = 'curseforge'"
+              >
+                CurseForge
+              </button>
+            </div>
             <div class="search-box full">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-              <input type="text" v-model="catalogQuery" @input="onCatalogInput" :placeholder="t('profile.searchPh')">
+              <input type="text" v-model="catalogQuery" @input="onCatalogInput" :placeholder="catalogSource === 'curseforge' ? 'Поиск на CurseForge…' : t('profile.searchPh')">
             </div>
           </div>
 

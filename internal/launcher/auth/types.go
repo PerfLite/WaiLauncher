@@ -23,16 +23,35 @@ type MCTokenData struct {
 	ExpiresAt   time.Time `json:"expiresAt"`
 }
 
+// MojangCape represents a cape associated with a Minecraft profile.
+type MojangCape struct {
+	ID    string `json:"id"`
+	State string `json:"state"` // "ACTIVE" | "INACTIVE"
+	URL   string `json:"url"`
+	Alias string `json:"alias"`
+}
+
+// PresetCape represents a predefined popular cape.
+type PresetCape struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	URL      string `json:"url"`
+}
+
 // Account represents a user profile in the launcher.
 type Account struct {
-	ID        string      `json:"id"`
-	Type      AccountType `json:"type"`
-	Username  string      `json:"username"`
-	UUID      string      `json:"uuid"` // Minecraft UUID
-	SkinURL   string      `json:"skinUrl,omitempty"`
-	AvatarURL string      `json:"avatarUrl,omitempty"`
-	CreatedAt time.Time   `json:"createdAt"`
-	LastUsed  time.Time   `json:"lastUsed"`
+	ID        string       `json:"id"`
+	Type      AccountType  `json:"type"`
+	Username  string       `json:"username"`
+	UUID      string       `json:"uuid"` // Minecraft UUID
+	SkinURL   string       `json:"skinUrl,omitempty"`
+	SkinModel string       `json:"skinModel,omitempty"` // "classic" | "slim"
+	CapeURL   string       `json:"capeUrl,omitempty"`
+	Capes     []MojangCape `json:"capes,omitempty"`
+	AvatarURL string       `json:"avatarUrl,omitempty"`
+	CreatedAt time.Time    `json:"createdAt"`
+	LastUsed  time.Time    `json:"lastUsed"`
 
 	// Microsoft specific fields
 	MicrosoftToken *MSTokenData `json:"msToken,omitempty"`

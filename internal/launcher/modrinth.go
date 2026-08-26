@@ -50,6 +50,38 @@ type ModrinthVersionFile struct {
 	Hashes   map[string]string `json:"hashes"`
 }
 
+// ModrinthDependency represents a dependency requirement of a version.
+type ModrinthDependency struct {
+	VersionID      *string `json:"version_id"`
+	ProjectID      *string `json:"project_id"`
+	FileName       *string `json:"file_name"`
+	DependencyType string  `json:"dependency_type"` // "required", "optional", "incompatible", "embedded"
+}
+
+// ModrinthProject represents Modrinth project details.
+type ModrinthProject struct {
+	ID          string   `json:"id"`
+	Slug        string   `json:"slug"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	IconURL     string   `json:"icon_url"`
+	Categories  []string `json:"categories"`
+}
+
+// ResolvedDependency represents a resolved dependency ready for installation.
+type ResolvedDependency struct {
+	ProjectID        string `json:"projectId"`
+	ProjectSlug      string `json:"projectSlug"`
+	ProjectTitle     string `json:"projectTitle"`
+	IconURL          string `json:"iconUrl"`
+	DependencyType   string `json:"dependencyType"` // "required" | "optional"
+	VersionID        string `json:"versionId"`
+	VersionNumber    string `json:"versionNumber"`
+	FileName         string `json:"fileName"`
+	DownloadURL      string `json:"downloadUrl"`
+	AlreadyInstalled bool   `json:"alreadyInstalled"`
+}
+
 // ModrinthVersion represents a release version of a project on Modrinth.
 type ModrinthVersion struct {
 	ID            string                `json:"id"`
@@ -59,6 +91,7 @@ type ModrinthVersion struct {
 	GameVersions  []string              `json:"game_versions"`
 	Loaders       []string              `json:"loaders"`
 	Files         []ModrinthVersionFile `json:"files"`
+	Dependencies  []ModrinthDependency  `json:"dependencies"`
 	DatePublished string                `json:"date_published"`
 }
 
@@ -229,3 +262,150 @@ func (l *Launcher) DownloadModFile(ctx context.Context, fileURL, destPath string
 	}
 	return os.Rename(tmp, destPath)
 }
+
+// GetModrinthVersion fetches a single version by ID.
+func (l *Launcher) GetModrinthVersion(ctx context.Context, versionID string) (*ModrinthVersion, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", modrinthAPI+"/version/"+url.PathEscape(versionID), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "WaiLauncher/1.0.0 (contact@wailauncher.local)")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("modrinth version request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("modrinth version returned %d", resp.StatusCode)
+	}
+
+	var v ModrinthVersion
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return nil, fmt.Errorf("decode modrinth version: %w", err)
+	}
+	return &v, nil
+}
+
+// GetModrinthProject fetches a single project by ID or slug.
+func (l *Launcher) GetModrinthProject(ctx context.Context, projectIDOrSlug string) (*ModrinthProject, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", modrinthAPI+"/project/"+url.PathEscape(projectIDOrSlug), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "WaiLauncher/1.0.0 (contact@wailauncher.local)")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("modrinth project request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("modrinth project returned %d", resp.StatusCode)
+	}
+
+	var p ModrinthProject
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		return nil, fmt.Errorf("decode modrinth project: %w", err)
+	}
+	return &p, nil
+}
+
+// ResolveModDependencies resolves all required and optional dependencies of a mod version.
+func (l *Launcher) ResolveModDependencies(ctx context.Context, versionID, loader, mcVersion string, installedFilenames []string) ([]ResolvedDependency, error) {
+	ver, err := l.GetModrinthVersion(ctx, versionID)
+	if err != nil {
+		return nil, err
+	}
+	if len(ver.Dependencies) == 0 {
+		return nil, nil
+	}
+
+	isInstalled := func(slug, title string) bool {
+		sLow := strings.ToLower(slug)
+		tLow := strings.ToLower(strings.ReplaceAll(title, " ", "-"))
+		for _, fn := range installedFilenames {
+			fnLow := strings.ToLower(fn)
+			if strings.Contains(fnLow, sLow) || strings.Contains(fnLow, tLow) {
+				return true
+			}
+		}
+		return false
+	}
+
+	var results []ResolvedDependency
+	seenProjects := make(map[string]bool)
+
+	for _, dep := range ver.Dependencies {
+		if dep.DependencyType != "required" && dep.DependencyType != "optional" {
+			continue
+		}
+
+		var projectID string
+		var chosenVersion *ModrinthVersion
+		var depProj *ModrinthProject
+
+		if dep.VersionID != nil && *dep.VersionID != "" {
+			if dv, err := l.GetModrinthVersion(ctx, *dep.VersionID); err == nil && dv != nil {
+				chosenVersion = dv
+				projectID = dv.ProjectID
+			}
+		} else if dep.ProjectID != nil && *dep.ProjectID != "" {
+			projectID = *dep.ProjectID
+		}
+
+		if projectID == "" || seenProjects[projectID] {
+			continue
+		}
+		seenProjects[projectID] = true
+
+		if dp, err := l.GetModrinthProject(ctx, projectID); err == nil && dp != nil {
+			depProj = dp
+		} else {
+			continue
+		}
+
+		if chosenVersion == nil {
+			// Find latest compatible version
+			vers, err := l.GetModrinthProjectVersions(ctx, projectID, loader, mcVersion)
+			if err == nil && len(vers) > 0 {
+				chosenVersion = &vers[0]
+			}
+		}
+
+		if chosenVersion == nil || len(chosenVersion.Files) == 0 {
+			continue
+		}
+
+		var chosenFile ModrinthVersionFile
+		for _, f := range chosenVersion.Files {
+			if f.Primary {
+				chosenFile = f
+				break
+			}
+		}
+		if chosenFile.URL == "" {
+			chosenFile = chosenVersion.Files[0]
+		}
+
+		alreadyInstalled := isInstalled(depProj.Slug, depProj.Title)
+
+		results = append(results, ResolvedDependency{
+			ProjectID:        depProj.ID,
+			ProjectSlug:      depProj.Slug,
+			ProjectTitle:     depProj.Title,
+			IconURL:          depProj.IconURL,
+			DependencyType:   dep.DependencyType,
+			VersionID:        chosenVersion.ID,
+			VersionNumber:    chosenVersion.VersionNum,
+			FileName:         chosenFile.Filename,
+			DownloadURL:      chosenFile.URL,
+			AlreadyInstalled: alreadyInstalled,
+		})
+	}
+
+	return results, nil
+}
+

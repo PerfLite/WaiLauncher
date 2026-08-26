@@ -10,11 +10,17 @@ export function CancelMicrosoftAuth():Promise<void>;
 
 export function CancelPlay():Promise<void>;
 
+export function CheckCurseForgeDependencies(arg1:string,arg2:string):Promise<Array<launcher.ResolvedDependency>>;
+
 export function CheckInstanceModUpdates(arg1:string):Promise<Record<string, launcher.ContentItem>>;
 
 export function CheckJavaUpdates():Promise<Array<launcher.JavaUpdateInfo>>;
 
 export function CheckLauncherUpdate():Promise<main.UpdateInfo>;
+
+export function CheckModDependencies(arg1:string,arg2:string):Promise<Array<launcher.ResolvedDependency>>;
+
+export function ClearAccountCape(arg1:string):Promise<auth.Account>;
 
 export function CloneInstance(arg1:string):Promise<main.Instance>;
 
@@ -62,6 +68,8 @@ export function GetModpackDetails(arg1:string,arg2:string):Promise<launcher.Modp
 
 export function GetNews():Promise<Array<launcher.NewsEntry>>;
 
+export function GetPresetCapes():Promise<Array<auth.PresetCape>>;
+
 export function GetSettings():Promise<main.Settings>;
 
 export function GetState():Promise<main.StatePayload>;
@@ -70,7 +78,13 @@ export function ImportInstanceDialog():Promise<main.Instance>;
 
 export function ImportInstanceFile(arg1:string):Promise<main.Instance>;
 
+export function InstallCurseForgeMod(arg1:string,arg2:string,arg3:string):Promise<launcher.ModItem>;
+
+export function InstallCurseForgeModWithDependencies(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<launcher.ModItem>;
+
 export function InstallJavaRuntime(arg1:number):Promise<void>;
+
+export function InstallModWithDependencies(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<launcher.ModItem>;
 
 export function InstallModpack(arg1:string,arg2:string,arg3:string):Promise<main.Instance>;
 
@@ -88,11 +102,15 @@ export function OpenScreenshotsFolder(arg1:string):Promise<void>;
 
 export function OpenURL(arg1:string):Promise<void>;
 
+export function PickCapeFile():Promise<main.FilePickResult>;
+
 export function PickDataDir():Promise<string>;
 
 export function PickInstanceIcon(arg1:string):Promise<string>;
 
 export function PickJavaPath():Promise<string>;
+
+export function PickSkinFile():Promise<main.FilePickResult>;
 
 export function Play(arg1:string):Promise<void>;
 
@@ -106,11 +124,17 @@ export function RemoveAccount(arg1:string):Promise<void>;
 
 export function SaveSettings(arg1:main.Settings):Promise<void>;
 
+export function SearchCurseForgeMods(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<launcher.ModrinthSearchResponse>;
+
 export function SearchModpacks(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<Array<launcher.ModpackItem>>;
 
 export function SearchModrinthMods(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<launcher.ModrinthSearchResponse>;
 
 export function SelectAccount(arg1:string):Promise<auth.Account>;
+
+export function SetAccountCape(arg1:string,arg2:string,arg3:string):Promise<auth.Account>;
+
+export function SetAccountSkin(arg1:string,arg2:string,arg3:string):Promise<auth.Account>;
 
 export function SetActiveInstance(arg1:string):Promise<void>;
 
@@ -132,7 +156,7 @@ export function UpdateInstanceLaunchConfig(arg1:string,arg2:number,arg3:string,a
 
 export function UpdateInstanceMod(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function UpdateInstanceSettings(arg1:string,arg2:string,arg3:string):Promise<main.Instance>;
+export function UpdateInstanceSettings(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<main.Instance>;
 
 export function WindowClose():Promise<void>;
 

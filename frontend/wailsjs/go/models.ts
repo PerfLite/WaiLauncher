@@ -68,12 +68,33 @@ export namespace auth {
 		    return a;
 		}
 	}
+	export class MojangCape {
+	    id: string;
+	    state: string;
+	    url: string;
+	    alias: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MojangCape(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.state = source["state"];
+	        this.url = source["url"];
+	        this.alias = source["alias"];
+	    }
+	}
 	export class Account {
 	    id: string;
 	    type: string;
 	    username: string;
 	    uuid: string;
 	    skinUrl?: string;
+	    skinModel?: string;
+	    capeUrl?: string;
+	    capes?: MojangCape[];
 	    avatarUrl?: string;
 	    // Go type: time
 	    createdAt: any;
@@ -95,6 +116,9 @@ export namespace auth {
 	        this.username = source["username"];
 	        this.uuid = source["uuid"];
 	        this.skinUrl = source["skinUrl"];
+	        this.skinModel = source["skinModel"];
+	        this.capeUrl = source["capeUrl"];
+	        this.capes = this.convertValues(source["capes"], MojangCape);
 	        this.avatarUrl = source["avatarUrl"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.lastUsed = this.convertValues(source["lastUsed"], null);
@@ -177,6 +201,26 @@ export namespace auth {
 	    }
 	}
 	
+	
+	
+	export class PresetCape {
+	    id: string;
+	    name: string;
+	    category: string;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PresetCape(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.category = source["category"];
+	        this.url = source["url"];
+	    }
+	}
 
 }
 
@@ -510,6 +554,36 @@ export namespace launcher {
 	        this.link = source["link"];
 	    }
 	}
+	export class ResolvedDependency {
+	    projectId: string;
+	    projectSlug: string;
+	    projectTitle: string;
+	    iconUrl: string;
+	    dependencyType: string;
+	    versionId: string;
+	    versionNumber: string;
+	    fileName: string;
+	    downloadUrl: string;
+	    alreadyInstalled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResolvedDependency(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectId = source["projectId"];
+	        this.projectSlug = source["projectSlug"];
+	        this.projectTitle = source["projectTitle"];
+	        this.iconUrl = source["iconUrl"];
+	        this.dependencyType = source["dependencyType"];
+	        this.versionId = source["versionId"];
+	        this.versionNumber = source["versionNumber"];
+	        this.fileName = source["fileName"];
+	        this.downloadUrl = source["downloadUrl"];
+	        this.alreadyInstalled = source["alreadyInstalled"];
+	    }
+	}
 	export class WorldItem {
 	    name: string;
 	    folderName: string;
@@ -553,6 +627,22 @@ export namespace main {
 	        this.size = source["size"];
 	        this.summary = source["summary"];
 	        this.content = source["content"];
+	    }
+	}
+	export class FilePickResult {
+	    filePath: string;
+	    dataUrl: string;
+	    fileName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FilePickResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.filePath = source["filePath"];
+	        this.dataUrl = source["dataUrl"];
+	        this.fileName = source["fileName"];
 	    }
 	}
 	export class Instance {
