@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	goruntime "runtime"
 	"strconv"
 	"strings"
@@ -52,28 +53,97 @@ type ghRelease struct {
 }
 
 func fetchLatestRelease(ctx context.Context) (*ghRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", updateRepoOwner, updateRepoName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "WaiLauncher/"+launcherVersion)
+	// 1. Try official GitHub REST API
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", updateRepoOwner, updateRepoName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err == nil {
+		req.Header.Set("Accept", "application/vnd.github.v3+json")
+		req.Header.Set("User-Agent", "WaiLauncher/"+launcherVersion)
 
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Do(req)
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				var rel ghRelease
+				if err := json.NewDecoder(resp.Body).Decode(&rel); err == nil {
+					return &rel, nil
+				}
+			}
+		}
+	}
+
+	// 2. Fallback: GitHub Web redirect (bypasses GitHub REST API rate limits 403 Forbidden completely)
+	webURL := fmt.Sprintf("https://github.com/%s/%s/releases/latest", updateRepoOwner, updateRepoName)
+	webReq, err := http.NewRequestWithContext(ctx, http.MethodHead, webURL, nil)
 	if err != nil {
-		return nil, err
+		webReq, err = http.NewRequestWithContext(ctx, http.MethodGet, webURL, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API HTTP %d", resp.StatusCode)
+	webReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+	noRedirectClient := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
-	var rel ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return nil, err
+	webResp, err := noRedirectClient.Do(webReq)
+	if err != nil {
+		return nil, fmt.Errorf("GitHub release check failed: %w", err)
 	}
-	return &rel, nil
+	defer webResp.Body.Close()
+
+	loc := webResp.Header.Get("Location")
+	if loc == "" && webResp.Request != nil && webResp.Request.URL != nil {
+		loc = webResp.Request.URL.String()
+	}
+
+	tagIndex := strings.LastIndex(loc, "/tag/")
+	if tagIndex == -1 {
+		return nil, fmt.Errorf("could not determine latest release tag from %s", loc)
+	}
+	tag := loc[tagIndex+len("/tag/"):]
+	tag = strings.TrimSpace(strings.Split(tag, "?")[0])
+
+	rel := &ghRelease{
+		TagName:     tag,
+		Name:        "WaiLauncher " + tag,
+		HTMLURL:     fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s", updateRepoOwner, updateRepoName, tag),
+		PublishedAt: time.Now().UTC().Format(time.RFC3339),
+		Body:        "Доступно обновление лаунчера " + tag,
+		Assets: []ghReleaseAsset{
+			{
+				Name:               "WaiLauncher.exe",
+				BrowserDownloadURL: fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/WaiLauncher.exe", updateRepoOwner, updateRepoName, tag),
+			},
+		},
+	}
+
+	// Try fetching changelog notes from release HTML
+	if pageReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rel.HTMLURL, nil); err == nil {
+		pageReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+		pageClient := &http.Client{Timeout: 6 * time.Second}
+		if pageResp, err := pageClient.Do(pageReq); err == nil {
+			defer pageResp.Body.Close()
+			if htmlBytes, err := io.ReadAll(pageResp.Body); err == nil {
+				htmlStr := string(htmlBytes)
+				re := regexp.MustCompile(`(?s)<div[^>]*class="[^"]*markdown-body[^"]*"[^>]*>(.*?)</div>`)
+				match := re.FindStringSubmatch(htmlStr)
+				if len(match) > 1 {
+					clean := regexp.MustCompile(`<[^>]+>`).ReplaceAllString(match[1], "")
+					clean = strings.TrimSpace(clean)
+					if clean != "" {
+						rel.Body = clean
+					}
+				}
+			}
+		}
+	}
+
+	return rel, nil
 }
 
 // parseSemver turns "1.2.3" / "v1.2.3" into a (major, minor, patch) triple.
