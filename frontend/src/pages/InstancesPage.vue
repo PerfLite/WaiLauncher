@@ -130,6 +130,7 @@ const logSearchQuery = ref('')
 /* Per-instance launch config (edited inside the unified settings modal) */
 const editRAMGB = ref(0) // 0 = inherit
 const editJavaPath = ref('')
+const editJVMPreset = ref('')
 const editJVMArgs = ref('')
 const editUseCustomWindow = ref(false)
 const editFullscreen = ref(false)
@@ -909,6 +910,7 @@ function openEditSettings() {
   fetchEditLoaderVersions(editLoader.value, editVersion.value)
   editRAMGB.value = ins.ramMb ? Math.round(ins.ramMb / 1024) : 0
   editJavaPath.value = ins.javaPath || ''
+  editJVMPreset.value = ins.jvmPreset || ''
   editJVMArgs.value = ins.jvmArgs || ''
   editUseCustomWindow.value = !!ins.useCustomWindow
   editFullscreen.value = !!ins.fullscreen
@@ -955,6 +957,7 @@ async function saveInstanceSettings() {
       ramMB,
       editJavaPath.value,
       editJVMArgs.value,
+      editJVMPreset.value,
       editUseCustomWindow.value,
       editFullscreen.value,
       editWinW.value,
@@ -1966,8 +1969,20 @@ async function saveInstanceSettings() {
           </div>
 
           <div class="fld-group">
-            <label class="fld-label">JVM</label>
-            <input class="txt-in full-w mono-in" v-model="editJVMArgs" :placeholder="t('inst.jvmArgsPh')">
+            <label class="fld-label">{{ t('settings.jvmPreset') }}</label>
+            <select class="sel full-w" v-model="editJVMPreset">
+              <option value="">{{ t('settings.jvmPresetGlobal') }}</option>
+              <option value="aikar">{{ t('settings.jvmPresetAikar') }}</option>
+              <option value="zgc">{{ t('settings.jvmPresetZGC') }}</option>
+              <option value="shenandoah">{{ t('settings.jvmPresetShenandoah') }}</option>
+              <option value="default">{{ t('settings.jvmPresetDefault') }}</option>
+              <option value="none">{{ t('settings.jvmPresetNone') }}</option>
+            </select>
+          </div>
+
+          <div class="fld-group">
+            <label class="fld-label">{{ t('settings.extraJvmArgs') }}</label>
+            <input class="txt-in full-w mono-in" v-model="editJVMArgs" :placeholder="t('settings.extraJvmArgsPh') || t('inst.jvmArgsPh')">
           </div>
 
           <div class="launch-cfg-toggle-card">

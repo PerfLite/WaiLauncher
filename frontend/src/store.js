@@ -8,7 +8,7 @@ export const store = reactive({
   page: 'home',
   maximized: false,
   ready: false,
-  launcherVer: '0.1.0',
+  launcherVer: '1.1.1',
   dataDir: '',
   versionsErr: '',
   settings: {
@@ -16,6 +16,8 @@ export const store = reactive({
     ramMb: 4096,
     resolution: '1920 × 1080',
     javaPath: '',
+    jvmPreset: 'aikar',
+    extraJvmArgs: '',
     closeOnLaunch: false,
     showSnapshots: false,
     language: 'ru',

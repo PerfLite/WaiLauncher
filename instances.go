@@ -41,13 +41,14 @@ type Instance struct {
 	ServerAddress string `json:"serverAddress,omitempty"`  // optional direct connect address
 
 	// Per-instance launch overrides; empty/zero = inherit global settings.
-	RAMMB          int    `json:"ramMb,omitempty"`
-	JavaPath       string `json:"javaPath,omitempty"`
-	JVMArgs        string `json:"jvmArgs,omitempty"`
-	UseCustomWindow bool  `json:"useCustomWindow,omitempty"`
-	Fullscreen     bool   `json:"fullscreen,omitempty"`
-	WindowWidth    int    `json:"windowWidth,omitempty"`
-	WindowHeight   int    `json:"windowHeight,omitempty"`
+	RAMMB           int    `json:"ramMb,omitempty"`
+	JavaPath        string `json:"javaPath,omitempty"`
+	JVMPreset       string `json:"jvmPreset,omitempty"` // "" or "global" = inherit, aikar, zgc, shenandoah, default, none
+	JVMArgs         string `json:"jvmArgs,omitempty"`
+	UseCustomWindow bool   `json:"useCustomWindow,omitempty"`
+	Fullscreen      bool   `json:"fullscreen,omitempty"`
+	WindowWidth     int    `json:"windowWidth,omitempty"`
+	WindowHeight    int    `json:"windowHeight,omitempty"`
 }
 
 func (a *App) instancesPath() string {
@@ -1300,7 +1301,7 @@ func crashSummary(content string) string {
 }
 
 // UpdateInstanceLaunchConfig persists per-instance launch overrides.
-func (a *App) UpdateInstanceLaunchConfig(instanceID string, ramMB int, javaPath, jvmArgs string, useCustomWindow, fullscreen bool, winW, winH int) (*Instance, error) {
+func (a *App) UpdateInstanceLaunchConfig(instanceID string, ramMB int, javaPath, jvmArgs, jvmPreset string, useCustomWindow, fullscreen bool, winW, winH int) (*Instance, error) {
 	list := a.loadInstances()
 	var target *Instance
 	for i := range list {
@@ -1323,6 +1324,7 @@ func (a *App) UpdateInstanceLaunchConfig(instanceID string, ramMB int, javaPath,
 	}
 	target.RAMMB = ramMB
 	target.JavaPath = strings.TrimSpace(javaPath)
+	target.JVMPreset = strings.TrimSpace(jvmPreset)
 	target.JVMArgs = strings.TrimSpace(jvmArgs)
 	target.UseCustomWindow = useCustomWindow
 	target.Fullscreen = fullscreen

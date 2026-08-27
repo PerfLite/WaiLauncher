@@ -262,6 +262,22 @@ export namespace launcher {
 	        this.translatedHtml = source["translatedHtml"];
 	    }
 	}
+	export class CacheInfo {
+	    sizeBytes: number;
+	    formatted: string;
+	    fileCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CacheInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sizeBytes = source["sizeBytes"];
+	        this.formatted = source["formatted"];
+	        this.fileCount = source["fileCount"];
+	    }
+	}
 	export class ContentItem {
 	    filename: string;
 	    name: string;
@@ -665,6 +681,7 @@ export namespace main {
 	    serverAddress?: string;
 	    ramMb?: number;
 	    javaPath?: string;
+	    jvmPreset?: string;
 	    jvmArgs?: string;
 	    useCustomWindow?: boolean;
 	    fullscreen?: boolean;
@@ -692,6 +709,7 @@ export namespace main {
 	        this.serverAddress = source["serverAddress"];
 	        this.ramMb = source["ramMb"];
 	        this.javaPath = source["javaPath"];
+	        this.jvmPreset = source["jvmPreset"];
 	        this.jvmArgs = source["jvmArgs"];
 	        this.useCustomWindow = source["useCustomWindow"];
 	        this.fullscreen = source["fullscreen"];
@@ -740,12 +758,15 @@ export namespace main {
 	    ramMb: number;
 	    resolution: string;
 	    javaPath: string;
+	    jvmPreset: string;
+	    extraJvmArgs: string;
 	    closeOnLaunch: boolean;
 	    showSnapshots: boolean;
 	    discordRpc: boolean;
 	    discordAppId: string;
 	    autoUpdate: boolean;
 	    launcherUpdates: boolean;
+	    autoCleanCache: boolean;
 	    selectedVersion: string;
 	    activeInstance: string;
 	    language: string;
@@ -765,12 +786,15 @@ export namespace main {
 	        this.ramMb = source["ramMb"];
 	        this.resolution = source["resolution"];
 	        this.javaPath = source["javaPath"];
+	        this.jvmPreset = source["jvmPreset"];
+	        this.extraJvmArgs = source["extraJvmArgs"];
 	        this.closeOnLaunch = source["closeOnLaunch"];
 	        this.showSnapshots = source["showSnapshots"];
 	        this.discordRpc = source["discordRpc"];
 	        this.discordAppId = source["discordAppId"];
 	        this.autoUpdate = source["autoUpdate"];
 	        this.launcherUpdates = source["launcherUpdates"];
+	        this.autoCleanCache = source["autoCleanCache"];
 	        this.selectedVersion = source["selectedVersion"];
 	        this.activeInstance = source["activeInstance"];
 	        this.language = source["language"];

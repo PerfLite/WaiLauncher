@@ -761,7 +761,7 @@ function onAvatarError(e) {
       <div class="modal-box skin-modal-box">
         <div class="modal-header">
           <div class="modal-title-group">
-            <h3 class="modal-title">{{ t('skin.modalTitle') }}</h3>
+            <h3 class="modal-title">{{ t('skin.skinTitle') }}</h3>
             <span class="modal-subtitle">{{ skinTargetAcc?.username }}</span>
           </div>
           <button class="modal-close" @click="skinModalOpen = false">✕</button>
@@ -769,44 +769,46 @@ function onAvatarError(e) {
 
         <div class="modal-body skin-modal-body">
           <div class="fld-group">
-            <label class="fld-label">{{ t('skin.modelVariant') }}</label>
-            <div class="skin-model-pills">
+            <label class="fld-label">{{ t('skin.model') }}</label>
+            <div class="skin-model-selector">
               <button
-                class="skin-model-pill"
+                type="button"
+                class="skin-model-btn"
                 :class="{ active: skinModelVariant === 'classic' }"
                 @click="skinModelVariant = 'classic'"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
-                <span>{{ t('skin.modelClassic') }}</span>
+                <span class="model-title">{{ t('skin.modelClassic') }}</span>
+                <span class="model-subtitle">Steve • 4px</span>
               </button>
               <button
-                class="skin-model-pill"
+                type="button"
+                class="skin-model-btn"
                 :class="{ active: skinModelVariant === 'slim' }"
                 @click="skinModelVariant = 'slim'"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="4" width="10" height="16" rx="2"/></svg>
-                <span>{{ t('skin.modelSlim') }}</span>
+                <span class="model-title">{{ t('skin.modelSlim') }}</span>
+                <span class="model-subtitle">Alex • 3px</span>
               </button>
             </div>
           </div>
 
           <div class="fld-group">
-            <label class="fld-label">Файл скина (.png)</label>
-            <div class="skin-pick-file-box">
-              <button class="btn-sec full-w pick-btn" @click="onPickSkinFile">
+            <label class="fld-label">{{ t('skin.pickFile') }}</label>
+            <div class="skin-file-pick-row">
+              <button type="button" class="btn-sec pick-skin-btn" @click="onPickSkinFile">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span>{{ skinInputFile ? skinInputFile.fileName : t('skin.pickFile') }}</span>
+                <span>{{ skinInputFile ? 'Файл выбран' : t('skin.pickFile') }}</span>
               </button>
               <div v-if="skinInputFile" class="skin-file-selected-badge">
-                <span>✓ Выбран файл: {{ skinInputFile.fileName }}</span>
-                <button class="skin-clear-file-btn" @click="skinInputFile = null">✕</button>
+                <span class="skin-file-name-text">{{ skinInputFile.fileName }}</span>
+                <button type="button" class="skin-clear-file-btn" @click="skinInputFile = null">✕</button>
               </div>
             </div>
           </div>
 
           <div class="fld-group" v-if="!skinInputFile">
             <label class="fld-label">{{ t('skin.orUrl') }}</label>
-            <input class="txt-in" v-model="skinInputUrl" placeholder="https://example.com/skin.png">
+            <input class="txt-in" v-model="skinInputUrl" :placeholder="t('skin.urlPh') || 'https://example.com/skin.png'">
           </div>
         </div>
 
@@ -814,7 +816,7 @@ function onAvatarError(e) {
           <button class="btn-sec" @click="skinModalOpen = false">{{ t('inst.cancel') }}</button>
           <button class="btn-primary" :disabled="skinSaving" @click="applySkin">
             <span v-if="skinSaving">Сохранение…</span>
-            <span v-else>{{ t('skin.apply') }}</span>
+            <span v-else>{{ t('skin.applySkin') }}</span>
           </button>
         </div>
       </div>
@@ -826,34 +828,37 @@ function onAvatarError(e) {
       <div class="modal-box cape-modal-box">
         <div class="modal-header">
           <div class="modal-title-group">
-            <h3 class="modal-title">{{ t('skin.capeModalTitle') }}</h3>
+            <h3 class="modal-title">{{ t('skin.capeTitle') }}</h3>
             <span class="modal-subtitle">{{ capeTargetAcc?.username }}</span>
           </div>
           <button class="modal-close" @click="capeModalOpen = false">✕</button>
         </div>
 
-        <div class="cape-nav-tabs">
+        <div class="cape-tabs-bar">
           <button
-            class="cape-nav-tab"
+            type="button"
+            class="cape-tab-btn"
             :class="{ active: capeActiveTab === 'gallery' }"
             @click="capeActiveTab = 'gallery'"
           >
-            {{ t('skin.presetCapes') }}
+            {{ t('skin.tabGallery') }}
           </button>
           <button
             v-if="capeTargetAcc?.type === 'microsoft'"
-            class="cape-nav-tab"
+            type="button"
+            class="cape-tab-btn"
             :class="{ active: capeActiveTab === 'official' }"
             @click="capeActiveTab = 'official'"
           >
-            {{ t('skin.officialCapes') }} ({{ capeTargetAcc.capes ? capeTargetAcc.capes.length : 0 }})
+            {{ t('skin.tabOfficial') }} ({{ capeTargetAcc.capes ? capeTargetAcc.capes.length : 0 }})
           </button>
           <button
-            class="cape-nav-tab"
+            type="button"
+            class="cape-tab-btn"
             :class="{ active: capeActiveTab === 'custom' }"
             @click="capeActiveTab = 'custom'"
           >
-            {{ t('skin.customCape') }}
+            {{ t('skin.tabCustom') }}
           </button>
         </div>
 
@@ -915,33 +920,33 @@ function onAvatarError(e) {
           <!-- TAB: Custom -->
           <div v-else class="cape-custom-pane">
             <div class="fld-group">
-              <label class="fld-label">Файл плаща (.png)</label>
-              <div class="skin-pick-file-box">
-                <button class="btn-sec full-w pick-btn" @click="onPickCapeFile">
+              <label class="fld-label">{{ t('skin.pickFile') }}</label>
+              <div class="skin-file-pick-row">
+                <button type="button" class="btn-sec pick-skin-btn" @click="onPickCapeFile">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <span>{{ customCapeFile ? customCapeFile.fileName : t('skin.pickFile') }}</span>
+                  <span>{{ customCapeFile ? 'Файл выбран' : t('skin.pickFile') }}</span>
                 </button>
                 <div v-if="customCapeFile" class="skin-file-selected-badge">
-                  <span>✓ Выбран файл: {{ customCapeFile.fileName }}</span>
-                  <button class="skin-clear-file-btn" @click="customCapeFile = null">✕</button>
+                  <span class="skin-file-name-text">{{ customCapeFile.fileName }}</span>
+                  <button type="button" class="skin-clear-file-btn" @click="customCapeFile = null">✕</button>
                 </div>
               </div>
             </div>
 
             <div class="fld-group" v-if="!customCapeFile">
               <label class="fld-label">{{ t('skin.orUrl') }}</label>
-              <input class="txt-in" v-model="customCapeUrl" placeholder="https://example.com/cape.png">
+              <input class="txt-in" v-model="customCapeUrl" :placeholder="t('skin.urlPh') || 'https://example.com/cape.png'">
             </div>
           </div>
         </div>
 
         <div class="modal-foot cape-modal-foot">
-          <button v-if="capeTargetAcc?.capeUrl" class="btn-sec clear-btn" @click="removeCape(capeTargetAcc)">
+          <button v-if="capeTargetAcc?.capeUrl" type="button" class="btn-sec clear-btn" @click="removeCape(capeTargetAcc)">
             {{ t('skin.removeCape') }}
           </button>
-          <div class="right-actions">
-            <button class="btn-sec" @click="capeModalOpen = false">{{ t('inst.cancel') }}</button>
-            <button class="btn-primary" :disabled="capeSaving" @click="applyCape">
+          <div class="cape-modal-actions">
+            <button type="button" class="btn-sec" @click="capeModalOpen = false">{{ t('inst.cancel') }}</button>
+            <button type="button" class="btn-primary" :disabled="capeSaving" @click="applyCape">
               <span v-if="capeSaving">Применение…</span>
               <span v-else>{{ t('skin.applyCape') }}</span>
             </button>

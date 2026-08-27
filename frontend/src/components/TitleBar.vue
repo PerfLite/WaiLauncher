@@ -34,10 +34,14 @@ function close() { WindowClose().catch(() => {}) }
       <button
         v-if="hasUpdate"
         class="win-btn update"
-        :title="(t('update.tbTitle'))"
+        :title="t('update.tbTitle')"
         @click="openUpdateModal"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16V8"/><path d="m8.5 11.5 3.5-3.5 3.5 3.5"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 16V8"/>
+          <path d="m8.5 11.5 3.5-3.5 3.5 3.5"/>
+        </svg>
       </button>
       <button class="win-btn" :title="t('tb.min')" @click="minimize">—</button>
       <button class="win-btn" :title="t('tb.max')" @click="toggleMax">▢</button>

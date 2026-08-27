@@ -104,9 +104,8 @@ onMounted(async () => {
         if (info && info.updateAvailable) {
           store.launcherUpdate.info = info
           store.launcherUpdate.error = ''
-          if (store.settings.launcherUpdates) {
-            store.launcherUpdate.modalOpen = true
-          }
+          // Titlebar indicator will blink so the user can open the update modal when desired
+          store.launcherUpdate.modalOpen = false
           return
         }
         if (info && !info.error) return // check succeeded, no newer release

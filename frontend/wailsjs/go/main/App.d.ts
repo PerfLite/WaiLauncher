@@ -22,6 +22,8 @@ export function CheckModDependencies(arg1:string,arg2:string):Promise<Array<laun
 
 export function ClearAccountCape(arg1:string):Promise<auth.Account>;
 
+export function ClearCache():Promise<launcher.CacheInfo>;
+
 export function CloneInstance(arg1:string):Promise<main.Instance>;
 
 export function CreateInstance(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.Instance>;
@@ -45,6 +47,8 @@ export function FetchTextureBase64(arg1:string):Promise<string>;
 export function GetAccounts():Promise<auth.AccountsData>;
 
 export function GetArticle(arg1:string):Promise<launcher.ArticleDetails>;
+
+export function GetCacheInfo():Promise<launcher.CacheInfo>;
 
 export function GetInstalledMods(arg1:string):Promise<Array<launcher.ModItem>>;
 
@@ -154,7 +158,7 @@ export function TranslateArticle(arg1:string,arg2:string):Promise<launcher.Artic
 
 export function UninstallJavaRuntime(arg1:number):Promise<void>;
 
-export function UpdateInstanceLaunchConfig(arg1:string,arg2:number,arg3:string,arg4:string,arg5:boolean,arg6:boolean,arg7:number,arg8:number):Promise<main.Instance>;
+export function UpdateInstanceLaunchConfig(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string,arg6:boolean,arg7:boolean,arg8:number,arg9:number):Promise<main.Instance>;
 
 export function UpdateInstanceMod(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 

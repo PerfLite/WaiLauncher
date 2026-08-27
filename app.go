@@ -18,7 +18,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const launcherVersion = "1.1.0"
+const launcherVersion = "1.1.1"
 
 // FilePickResult holds local file path and base64 data URL from file dialog.
 type FilePickResult struct {
@@ -117,7 +117,11 @@ func (a *App) startup(ctx context.Context) {
 
 	a.fitWindow()
 	a.migrateLegacyInstance()
-	a.migrateLegacyGameDirs()
+	if a.set.AutoCleanCache && a.l != nil {
+		go func() {
+			_, _, _ = a.l.CleanOldCache(30 * 24 * time.Hour)
+		}()
+	}
 
 	runtime.OnFileDrop(a.ctx, func(x, y int, paths []string) {
 		for _, p := range paths {
@@ -430,6 +434,22 @@ func (a *App) Play(instanceID string) error {
 		if javaPath == "" {
 			javaPath = a.set.JavaPath
 		}
+		jvmPreset := inst.JVMPreset
+		if jvmPreset == "" || jvmPreset == "global" {
+			jvmPreset = a.set.JVMPreset
+		}
+		if jvmPreset == "" {
+			jvmPreset = "aikar"
+		}
+
+		var extraArgs []string
+		if a.set.ExtraJVMArgs != "" {
+			extraArgs = append(extraArgs, parseJVMArgs(a.set.ExtraJVMArgs)...)
+		}
+		if inst.JVMArgs != "" {
+			extraArgs = append(extraArgs, parseJVMArgs(inst.JVMArgs)...)
+		}
+
 		cfg := launcher.LaunchConfig{
 			Username:    activeAcc.Username,
 			UUID:        uuid,
@@ -438,7 +458,8 @@ func (a *App) Play(instanceID string) error {
 			XUID:        xuid,
 			RAMMB:       ramMB,
 			JavaPath:    javaPath,
-			ExtraJVM:    parseJVMArgs(inst.JVMArgs),
+			JVMPreset:   jvmPreset,
+			ExtraJVM:    extraArgs,
 			GameDir:     gameDir,
 			Width:       w,
 			Height:      h,
@@ -941,6 +962,30 @@ func (a *App) FetchTextureBase64(url string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return auth.FetchTextureBase64(ctx, url)
+}
+
+// GetCacheInfo returns statistics about the cached files.
+func (a *App) GetCacheInfo() (*launcher.CacheInfo, error) {
+	if a.l == nil {
+		return nil, fmt.Errorf("launcher not initialized")
+	}
+	return a.l.GetCacheInfo()
+}
+
+// ClearCache completely clears the cache directory and returns the freed space info.
+func (a *App) ClearCache() (*launcher.CacheInfo, error) {
+	if a.l == nil {
+		return nil, fmt.Errorf("launcher not initialized")
+	}
+	freedBytes, err := a.l.ClearCache()
+	if err != nil {
+		return nil, err
+	}
+	return &launcher.CacheInfo{
+		SizeBytes: 0,
+		Formatted: launcher.FormatBytes(freedBytes),
+		FileCount: 0,
+	}, nil
 }
 
 

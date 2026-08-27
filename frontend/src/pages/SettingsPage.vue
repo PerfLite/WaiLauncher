@@ -2,7 +2,7 @@
 import {ref, computed, watch, onMounted} from 'vue'
 import {store, toast, reloadNews, activeAccount, getAccountAvatar} from '../store'
 import {t, setLang} from '../i18n'
-import {SaveSettings, GetSettings, PickJavaPath, PickDataDir, OpenDataDir, OpenLogsFolder, OpenURL, GetJavaRuntimesStatus, InstallJavaRuntime, UninstallJavaRuntime, CheckLauncherUpdate, CheckJavaUpdates} from '../../wailsjs/go/main/App'
+import {SaveSettings, GetSettings, PickJavaPath, PickDataDir, OpenDataDir, OpenLogsFolder, OpenURL, GetJavaRuntimesStatus, InstallJavaRuntime, UninstallJavaRuntime, CheckLauncherUpdate, CheckJavaUpdates, GetCacheInfo, ClearCache} from '../../wailsjs/go/main/App'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
 import skinFallback from '../assets/skin.png'
 import logoImg from '../assets/logo.png'
@@ -214,6 +214,44 @@ async function checkUpdateNow() {
     checkingUpdate.value = false
   }
 }
+
+/* Cache management */
+const cacheInfo = ref({ sizeBytes: 0, formatted: '0 Б', fileCount: 0 })
+const cacheClearing = ref(false)
+
+async function loadCacheStats() {
+  try {
+    const res = await GetCacheInfo()
+    if (res) {
+      cacheInfo.value = res
+    }
+  } catch (_) {}
+}
+
+async function onClearCache() {
+  if (cacheClearing.value) return
+  cacheClearing.value = true
+  try {
+    const res = await ClearCache()
+    cacheInfo.value = res || { sizeBytes: 0, formatted: '0 Б', fileCount: 0 }
+    toast(t('settings.cacheFreed', { s: res?.formatted || '0 Б' }))
+  } catch (e) {
+    toast('Ошибка очистки кэша: ' + e, true)
+  } finally {
+    cacheClearing.value = false
+  }
+}
+
+onMounted(() => {
+  loadJavaRuntimes()
+  loadCacheStats()
+})
+
+watch(() => store.page, (newPage) => {
+  if (newPage === 'settings') {
+    loadCacheStats()
+  }
+})
 </script>
 
 <template>
@@ -304,6 +342,26 @@ async function checkUpdateNow() {
             <button class="btn-sec" @click="OpenDataDir">{{ t('settings.open') }}</button>
           </div>
         </div>
+        <div class="set-row">
+          <div>
+            <div class="set-name">{{ t('settings.cacheSize') }}</div>
+            <div class="set-desc">{{ t('settings.cacheSizeDesc') }}</div>
+          </div>
+          <div class="set-ctrl cache-ctrl">
+            <span class="cache-size-badge">{{ cacheInfo.formatted || '0 Б' }}</span>
+            <button class="btn-sec" :disabled="cacheClearing" @click="onClearCache">
+              <span v-if="cacheClearing">{{ t('settings.clearing') }}</span>
+              <span v-else>{{ t('settings.clearCache') }}</span>
+            </button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div>
+            <div class="set-name">{{ t('settings.autoCleanCache') }}</div>
+            <div class="set-desc">{{ t('settings.autoCleanCacheDesc') }}</div>
+          </div>
+          <div class="set-ctrl"><label class="switch"><input type="checkbox" v-model="store.settings.autoCleanCache"><i></i></label></div>
+        </div>
       </div>
 
       <div class="set-group">
@@ -327,6 +385,30 @@ async function checkUpdateNow() {
             <select class="sel" v-model="store.settings.resolution">
               <option v-for="r in resolutions" :key="r">{{ r }}</option>
             </select>
+          </div>
+        </div>
+        <div class="set-row">
+          <div>
+            <div class="set-name">{{ t('settings.jvmPreset') }}</div>
+            <div class="set-desc">{{ t('settings.jvmPresetDesc') }}</div>
+          </div>
+          <div class="set-ctrl">
+            <select class="sel" v-model="store.settings.jvmPreset" style="min-width: 260px;">
+              <option value="aikar">{{ t('settings.jvmPresetAikar') }}</option>
+              <option value="zgc">{{ t('settings.jvmPresetZGC') }}</option>
+              <option value="shenandoah">{{ t('settings.jvmPresetShenandoah') }}</option>
+              <option value="default">{{ t('settings.jvmPresetDefault') }}</option>
+              <option value="none">{{ t('settings.jvmPresetNone') }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="set-row">
+          <div>
+            <div class="set-name">{{ t('settings.extraJvmArgs') }}</div>
+            <div class="set-desc">{{ t('settings.extraJvmArgsDesc') }}</div>
+          </div>
+          <div class="set-ctrl" style="flex: 1; max-width: 380px;">
+            <input class="txt-in full-w mono-in" v-model="store.settings.extraJvmArgs" :placeholder="t('settings.extraJvmArgsPh')">
           </div>
         </div>
       </div>

@@ -38,6 +38,10 @@ export function ClearAccountCape(arg1) {
   return window['go']['main']['App']['ClearAccountCape'](arg1);
 }
 
+export function ClearCache() {
+  return window['go']['main']['App']['ClearCache']();
+}
+
 export function CloneInstance(arg1) {
   return window['go']['main']['App']['CloneInstance'](arg1);
 }
@@ -84,6 +88,10 @@ export function GetAccounts() {
 
 export function GetArticle(arg1) {
   return window['go']['main']['App']['GetArticle'](arg1);
+}
+
+export function GetCacheInfo() {
+  return window['go']['main']['App']['GetCacheInfo']();
 }
 
 export function GetInstalledMods(arg1) {
@@ -302,8 +310,8 @@ export function UninstallJavaRuntime(arg1) {
   return window['go']['main']['App']['UninstallJavaRuntime'](arg1);
 }
 
-export function UpdateInstanceLaunchConfig(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
-  return window['go']['main']['App']['UpdateInstanceLaunchConfig'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+export function UpdateInstanceLaunchConfig(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['UpdateInstanceLaunchConfig'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
 }
 
 export function UpdateInstanceMod(arg1, arg2, arg3, arg4) {

@@ -14,12 +14,15 @@ type Settings struct {
 	RAMMB           int    `json:"ramMb"`
 	Resolution      string `json:"resolution"`
 	JavaPath        string `json:"javaPath"`
+	JVMPreset       string `json:"jvmPreset"`     // aikar | zgc | shenandoah | default | none
+	ExtraJVMArgs    string `json:"extraJvmArgs"`  // user custom flags
 	CloseOnLaunch   bool   `json:"closeOnLaunch"`
 	ShowSnapshots   bool   `json:"showSnapshots"`
 	DiscordRPC      bool   `json:"discordRpc"`
 	DiscordAppID    string `json:"discordAppId"` // Discord Developer Portal application id for Rich Presence
 	AutoUpdate      bool   `json:"autoUpdate"`
 	LauncherUpdates bool   `json:"launcherUpdates"` // self-update: check GitHub Releases on start
+	AutoCleanCache  bool   `json:"autoCleanCache"`  // auto-delete cache older than 30 days on startup
 	SelectedVersion string `json:"selectedVersion"`
 	ActiveInstance  string `json:"activeInstance"` // id of the build ИГРАТЬ launches
 	Language        string `json:"language"`       // "ru" (default) or "en"
@@ -37,20 +40,23 @@ type Settings struct {
 
 func defaultSettings(root string) *Settings {
 	return &Settings{
-		Username:      "Player",
-		RAMMB:         4096,
-		Resolution:    "1920 × 1080",
-		DiscordRPC:    true,
-		AutoUpdate:    true,
+		Username:        "Player",
+		RAMMB:           4096,
+		Resolution:      "1920 × 1080",
+		JVMPreset:       "aikar",
+		ExtraJVMArgs:    "",
+		DiscordRPC:      true,
+		AutoUpdate:      true,
 		LauncherUpdates: true,
-		CloseOnLaunch: false,
-		Language:      "ru",
-		CenterWindow:  true,
-		WindowCustom:  false,
-		Fullscreen:    false,
-		WindowWidth:   854,
-		WindowHeight:  480,
-		root:          root,
+		AutoCleanCache:  true,
+		CloseOnLaunch:   false,
+		Language:        "ru",
+		CenterWindow:    true,
+		WindowCustom:    false,
+		Fullscreen:      false,
+		WindowWidth:     854,
+		WindowHeight:    480,
+		root:            root,
 	}
 }
 
@@ -84,6 +90,10 @@ func (s *Settings) normalize() {
 	if s.RAMMB > 32768 {
 		s.RAMMB = 32768
 	}
+	if s.JVMPreset == "" {
+		s.JVMPreset = "aikar"
+	}
+	s.ExtraJVMArgs = strings.TrimSpace(s.ExtraJVMArgs)
 	if s.Language != "ru" && s.Language != "en" {
 		s.Language = "ru"
 	}

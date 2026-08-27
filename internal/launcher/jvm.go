@@ -19,6 +19,7 @@ type LaunchConfig struct {
 	ClientID    string
 	RAMMB       int
 	JavaPath    string   // empty = auto-detect
+	JVMPreset   string   // aikar | zgc | shenandoah | default | none
 	ExtraJVM    []string // user-provided JVM arguments (per-instance overrides)
 	GameDir     string   // empty = shared <root>/game (per-instance dirs otherwise)
 	Width       int      // 0 = don't pass --width
@@ -153,7 +154,10 @@ func (l *Launcher) BuildCommand(v *VersionJSON, cfg LaunchConfig) (string, []str
 	if !userHasHeap {
 		jvm = append(jvm, fmt.Sprintf("-Xmx%dM", cfg.RAMMB))
 	}
-	jvm = append(jvm, "-XX:+UnlockExperimentalVMOptions", "-XX:+UseG1GC", "-XX:G1NewSizePercent=20", "-XX:G1ReservePercent=20", "-XX:MaxGCPauseMillis=50", "-XX:G1HeapRegionSize=32M")
+	presetFlags := GetJVMPresetFlags(cfg.JVMPreset)
+	if len(presetFlags) > 0 {
+		jvm = append(jvm, presetFlags...)
+	}
 	jvm = append(jvm, cfg.ExtraJVM...)
 
 	hasGameResRule := false
@@ -282,4 +286,48 @@ func findJava() string {
 		}
 	}
 	return ""
+}
+
+// GetJVMPresetFlags returns optimized JVM garbage collection and performance flags.
+func GetJVMPresetFlags(preset string) []string {
+	switch strings.ToLower(strings.TrimSpace(preset)) {
+	case "zgc":
+		return []string{
+			"-XX:+UnlockExperimentalVMOptions",
+			"-XX:+UseZGC",
+			"-XX:+AlwaysPreTouch",
+			"-XX:+DisableExplicitGC",
+		}
+	case "shenandoah":
+		return []string{
+			"-XX:+UnlockExperimentalVMOptions",
+			"-XX:+UseShenandoahGC",
+			"-XX:ShenandoahGCMode=iu",
+			"-XX:+AlwaysPreTouch",
+			"-XX:+DisableExplicitGC",
+		}
+	case "default":
+		return []string{
+			"-XX:+UnlockExperimentalVMOptions",
+			"-XX:+UseG1GC",
+			"-XX:MaxGCPauseMillis=50",
+		}
+	case "none":
+		return nil
+	case "aikar", "":
+		fallthrough
+	default:
+		// Aikar's optimized flags for Minecraft G1GC
+		return []string{
+			"-XX:+UnlockExperimentalVMOptions",
+			"-XX:+UseG1GC",
+			"-XX:G1NewSizePercent=20",
+			"-XX:G1ReservePercent=20",
+			"-XX:MaxGCPauseMillis=50",
+			"-XX:G1HeapRegionSize=32M",
+			"-XX:+ParallelRefProcEnabled",
+			"-XX:+AlwaysPreTouch",
+			"-XX:+DisableExplicitGC",
+		}
+	}
 }
