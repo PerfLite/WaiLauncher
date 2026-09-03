@@ -42,6 +42,7 @@ export const store = reactive({
   createInstanceModalOpen: false,
   mods: {}, // name -> installed
   launcherUpdate: {info: null, modalOpen: false, downloading: false, percent: 0, message: '', restarting: false, error: ''},
+  modpackUpdates: {}, // instanceId -> ModpackUpdateInfo
   gameLog: {running: false, lines: []},
 })
 

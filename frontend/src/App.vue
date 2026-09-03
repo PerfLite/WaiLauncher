@@ -14,7 +14,7 @@ import NewsPage from './pages/NewsPage.vue'
 import ModsPage from './pages/ModsPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
 import AccountsPage from './pages/AccountsPage.vue'
-import {GetState, RefreshVersions, GetNews, CheckLauncherUpdate} from '../wailsjs/go/main/App'
+import {GetState, RefreshVersions, GetNews, CheckLauncherUpdate, CheckInstanceModpackUpdate} from '../wailsjs/go/main/App'
 import {EventsOn} from '../wailsjs/runtime/runtime'
 
 function applyState(st) {
@@ -92,11 +92,25 @@ onMounted(async () => {
     store.launcherUpdate.restarting = true
   })
 
+  // Check modpack updates for all installed modpacks in the background
+  async function checkAllModpackUpdates() {
+    if (!store.instances || !store.instances.length) return
+    for (const inst of store.instances) {
+      if (inst.modpackSource && inst.modpackId) {
+        try {
+          const res = await CheckInstanceModpackUpdate(inst.id)
+          if (res) {
+            store.modpackUpdates[inst.id] = res
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
   // Self-update check (like gitdesktop): query GitHub Releases on start.
-  // GitHub can return 404 for a fresh release for up to ~60s (the
-  // /releases/latest endpoint lags), so retry a few times before giving up.
+  // Immediate check at startup (600ms), followed by retry intervals.
   (async function checkUpdates() {
-    const delays = [3000, 15000, 40000, 90000]
+    const delays = [600, 8000, 25000, 60000]
     for (const delay of delays) {
       await new Promise(r => setTimeout(r, delay))
       try {
@@ -108,14 +122,19 @@ onMounted(async () => {
           store.launcherUpdate.modalOpen = false
           return
         }
-        if (info && !info.error) return // check succeeded, no newer release
       } catch (e) { /* offline or GitHub not reachable yet — retry */ }
     }
   })()
 
+  // Start checking modpack updates once store is populated
+  setTimeout(() => {
+    checkAllModpackUpdates()
+  }, 1000)
+
   EventsOn('instances-updated', (list) => {
     if (Array.isArray(list)) {
       store.instances = list
+      checkAllModpackUpdates()
     }
   })
 })

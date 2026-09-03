@@ -5,7 +5,8 @@ import {
   Play, CancelPlay, StopGame,
   SetActiveInstance, DeleteInstance,
   OpenInstanceDir, UpdateInstanceGroup, ReorderInstances,
-  CreateGroup, RenameGroup, DeleteGroup
+  CreateGroup, RenameGroup, DeleteGroup,
+  CheckInstanceModpackUpdate
 } from '../../wailsjs/go/main/App'
 import {t} from '../i18n'
 import heroBg from '../assets/hero-bg.png'
@@ -432,6 +433,31 @@ function ctxProfile() {
   }
 }
 
+function openInstUpdate(inst) {
+  chooseInstance(inst)
+  store.page = 'instances'
+}
+
+async function ctxCheckUpdate() {
+  const inst = ctxMenuInst.value
+  closeContextMenu()
+  if (!inst) return
+  toast('Проверка обновлений сборки...')
+  try {
+    const res = await CheckInstanceModpackUpdate(inst.id)
+    if (res) {
+      store.modpackUpdates[inst.id] = res
+      if (res.hasUpdate) {
+        toast(t('pack.updateAvailable', {v: res.latestVersion}))
+      } else {
+        toast(t('pack.noUpdates'))
+      }
+    }
+  } catch (e) {
+    toast((t('inst.err') || 'Ошибка: ') + e, true)
+  }
+}
+
 async function ctxOpenFolder() {
   const inst = ctxMenuInst.value
   closeContextMenu()
@@ -742,6 +768,18 @@ onMounted(() => {
               <div class="inst-name">{{ inst.name }}</div>
               <div class="inst-sub">{{ inst.versionId }} • {{ t('loader.' + inst.loader) }}</div>
             </div>
+            <div
+              v-if="store.modpackUpdates[inst.id] && store.modpackUpdates[inst.id].hasUpdate"
+              class="inst-update-indicator"
+              :title="t('pack.updateAvailable', {v: store.modpackUpdates[inst.id].latestVersion})"
+              @click.stop="openInstUpdate(inst)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 16V8"/>
+                <path d="m8.5 11.5 3.5-3.5 3.5 3.5"/>
+              </svg>
+            </div>
             <button
               class="inst-play-btn"
               :title="t('home.play')"
@@ -782,6 +820,19 @@ onMounted(() => {
         <button class="ctx-item" @click="ctxOpenFolder">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
           <span>{{ t('ctx.openFolder') }}</span>
+        </button>
+        <button
+          v-if="ctxMenuInst && ctxMenuInst.modpackSource"
+          class="ctx-item"
+          @click="ctxCheckUpdate"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+            <path d="M16 21h5v-5"/>
+          </svg>
+          <span>{{ t('pack.checkUpdate') || 'Проверить обновление' }}</span>
         </button>
 
         <div class="ctx-divider"></div>

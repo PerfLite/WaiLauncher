@@ -442,6 +442,23 @@ input[type="number"] {
   box-shadow:0 0 12px rgba(85,210,74,.4);transform:scale(1.06);
 }
 .inst-play-btn:hover svg{color:#08130a}
+
+.inst-update-indicator{
+  width:32px;height:32px;border-radius:9px;flex:none;
+  background:linear-gradient(135deg, rgba(255,180,0,.2), rgba(255,120,0,.15));
+  border:1px solid rgba(255,180,0,.5);color:#ffb400;cursor:pointer;
+  display:grid;place-items:center;transition:all .18s ease;
+  animation:pulse-update-badge 2s infinite ease-in-out;
+}
+.inst-update-indicator svg{width:16px;height:16px}
+.inst-update-indicator:hover{
+  background:#ff9900;color:#121318;border-color:#ff9900;
+  box-shadow:0 0 14px rgba(255,150,0,.6);transform:scale(1.08);
+}
+@keyframes pulse-update-badge{
+  0%,100%{box-shadow:0 0 6px rgba(255,180,0,.25);border-color:rgba(255,180,0,.4)}
+  50%{box-shadow:0 0 14px rgba(255,180,0,.6);border-color:rgba(255,180,0,.85)}
+}
 .inst-del{
   width:32px;height:32px;border-radius:9px;border:none;flex:none;
   background:transparent;color:var(--muted);cursor:pointer;

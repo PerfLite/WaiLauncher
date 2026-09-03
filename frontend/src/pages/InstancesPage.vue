@@ -245,9 +245,17 @@ watch(selectedInst, (inst) => {
     } else if (currentTab.value === 'crashes') {
       loadCrashes()
     }
+    // Populate immediately from global store so icon/banner appears without delay
+    if (store.modpackUpdates[inst.id]) {
+      packUpdateInfo.value = store.modpackUpdates[inst.id]
+    }
     checkModpackUpdate(false)
   }
 }, {immediate: true})
+
+watch(() => store.modpackUpdates[selectedInst.value?.id], (info) => {
+  if (info) packUpdateInfo.value = info
+})
 
 async function checkModpackUpdate(showToast = false) {
   if (!selectedInst.value || !selectedInst.value.modpackSource || !selectedInst.value.modpackId) {
@@ -258,6 +266,9 @@ async function checkModpackUpdate(showToast = false) {
   try {
     const res = await CheckInstanceModpackUpdate(selectedInst.value.id)
     packUpdateInfo.value = res
+    if (res) {
+      store.modpackUpdates[selectedInst.value.id] = res
+    }
     if (res && res.hasUpdate) {
       if (showToast) toast(t('pack.updateAvailable', {v: res.latestVersion}))
     } else {
@@ -284,6 +295,7 @@ async function onUpdateModpack() {
     if (updated) {
       store.instances = store.instances.map(i => i.id === updated.id ? updated : i)
       packUpdateInfo.value = null
+      delete store.modpackUpdates[selectedInst.value.id]
       toast(t('pack.updateSuccess', {v: updated.modpackVersionName || updated.versionId}))
       loadContent()
     }

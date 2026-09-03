@@ -54,11 +54,13 @@ type ghRelease struct {
 
 func fetchLatestRelease(ctx context.Context) (*ghRelease, error) {
 	// 1. Try official GitHub REST API
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", updateRepoOwner, updateRepoName)
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest?_=%d", updateRepoOwner, updateRepoName, time.Now().Unix())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err == nil {
 		req.Header.Set("Accept", "application/vnd.github.v3+json")
 		req.Header.Set("User-Agent", "WaiLauncher/"+launcherVersion)
+		req.Header.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		req.Header.Set("Pragma", "no-cache")
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
@@ -74,7 +76,7 @@ func fetchLatestRelease(ctx context.Context) (*ghRelease, error) {
 	}
 
 	// 2. Fallback: GitHub Web redirect (bypasses GitHub REST API rate limits 403 Forbidden completely)
-	webURL := fmt.Sprintf("https://github.com/%s/%s/releases/latest", updateRepoOwner, updateRepoName)
+	webURL := fmt.Sprintf("https://github.com/%s/%s/releases/latest?_=%d", updateRepoOwner, updateRepoName, time.Now().Unix())
 	webReq, err := http.NewRequestWithContext(ctx, http.MethodHead, webURL, nil)
 	if err != nil {
 		webReq, err = http.NewRequestWithContext(ctx, http.MethodGet, webURL, nil)
@@ -83,6 +85,8 @@ func fetchLatestRelease(ctx context.Context) (*ghRelease, error) {
 		}
 	}
 	webReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	webReq.Header.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	webReq.Header.Set("Pragma", "no-cache")
 
 	noRedirectClient := &http.Client{
 		Timeout: 10 * time.Second,
