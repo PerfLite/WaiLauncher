@@ -9,7 +9,9 @@
 
 Современный, быстрый и функциональный настольный лаунчер Minecraft на **Wails v2** (Go + Vue 3). Поддерживает запуск ванильной игры, модлоадеров (Fabric, Forge, NeoForge, Quilt), изоляцию сборок с собственными папками, кастомизацию скинов/плащей с 3D-предпросмотром, а также установку модов и модпаков напрямую из **Modrinth**, **CurseForge** и **FTB (Feed The Beast)** с функцией **автообновления сборок в 1 клик**.
 
-![WaiLauncher](build/appicon.png)
+![WaiLauncher](screenshots/WaiLauncher.png)
+
+![WaiLauncher Interface](screenshots/WaiLauncher_skrin.png)
 
 ## Возможности
 
