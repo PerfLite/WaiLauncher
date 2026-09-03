@@ -33,12 +33,20 @@ type Instance struct {
 	LoaderVersion string `json:"loaderVersion"` // e.g. 47.2.20; "" for vanilla
 	Dir           string `json:"dir"`           // folder name inside instances/; "" = legacy shared game dir
 	Created       int64  `json:"created"`
-	Icon          string `json:"icon,omitempty"`           // URL or base64
-	PlayTime      int64  `json:"playTime,omitempty"`       // in seconds
-	PlayTimeToday int64  `json:"playTimeToday,omitempty"`  // in seconds (current day)
-	LastPlayDay   string `json:"lastPlayDay,omitempty"`    // "2006-01-02" of the last session
-	LastPlayed    int64  `json:"lastPlayed,omitempty"`     // unix timestamp
-	ServerAddress string `json:"serverAddress,omitempty"`  // optional direct connect address
+	Icon          string `json:"icon,omitempty"`          // URL or base64
+	Group         string `json:"group,omitempty"`         // folder / category name
+	SortOrder     int    `json:"sortOrder,omitempty"`     // custom sort index
+	PlayTime      int64  `json:"playTime,omitempty"`      // in seconds
+	PlayTimeToday int64  `json:"playTimeToday,omitempty"` // in seconds (current day)
+	LastPlayDay   string `json:"lastPlayDay,omitempty"`   // "2006-01-02" of the last session
+	LastPlayed    int64  `json:"lastPlayed,omitempty"`    // unix timestamp
+	ServerAddress string `json:"serverAddress,omitempty"` // optional direct connect address
+
+	// Upstream modpack tracking (for auto-updates)
+	ModpackSource      string `json:"modpackSource,omitempty"`      // "modrinth" | "curseforge" | "ftb"
+	ModpackID          string `json:"modpackId,omitempty"`          // project ID / slug
+	ModpackVersionID   string `json:"modpackVersionId,omitempty"`   // installed version ID
+	ModpackVersionName string `json:"modpackVersionName,omitempty"` // e.g. "1.0.0"
 
 	// Per-instance launch overrides; empty/zero = inherit global settings.
 	RAMMB           int    `json:"ramMb,omitempty"`
@@ -51,17 +59,33 @@ type Instance struct {
 	WindowHeight    int    `json:"windowHeight,omitempty"`
 }
 
+// VerifyResult reports the statistics of an instance verification scan.
+type VerifyResult struct {
+	TotalChecked int      `json:"totalChecked"`
+	Repaired     int      `json:"repaired"`
+	Failed       int      `json:"failed"`
+	Details      []string `json:"details"`
+}
+
 func (a *App) instancesPath() string {
 	return filepath.Join(a.l.Root, "instances.json")
 }
 
 func (a *App) loadInstances() []Instance {
-	data, err := os.ReadFile(a.instancesPath())
-	if err != nil {
-		return nil
-	}
+	path := a.instancesPath()
+	data, err := os.ReadFile(path)
 	var list []Instance
-	if json.Unmarshal(data, &list) != nil {
+	if err != nil || len(data) == 0 || json.Unmarshal(data, &list) != nil {
+		// Attempt fallback recovery from .bak
+		bakPath := path + ".bak"
+		if bakData, bakErr := os.ReadFile(bakPath); bakErr == nil && len(bakData) > 0 {
+			if json.Unmarshal(bakData, &list) == nil && len(list) > 0 {
+				launcher.LogWarn("Recovered corrupted instances.json from instances.json.bak")
+				_ = atomicSaveJSON(path, bakData)
+			}
+		}
+	}
+	if list == nil {
 		return nil
 	}
 	hasMissingIcons := false
@@ -143,7 +167,70 @@ func (a *App) saveInstances(list []Instance) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(a.instancesPath(), data, 0o644)
+	return atomicSaveJSON(a.instancesPath(), data)
+}
+
+// atomicSaveJSON writes data atomically (.tmp -> targetPath) and keeps a .bak copy
+// plus historical snapshots in <root>/backups/config_backups/.
+func atomicSaveJSON(targetPath string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		return err
+	}
+
+	// 1. If file already exists and is non-empty, copy to .bak and archive snapshot
+	if info, err := os.Stat(targetPath); err == nil && info.Size() > 0 {
+		oldData, err := os.ReadFile(targetPath)
+		if err == nil && len(oldData) > 0 {
+			// Write immediate .bak file
+			_ = os.WriteFile(targetPath+".bak", oldData, 0o644)
+
+			// Store rolling timestamped backup in backups/config_backups/
+			backupDir := filepath.Join(filepath.Dir(targetPath), "backups", "config_backups")
+			_ = os.MkdirAll(backupDir, 0o755)
+			baseName := filepath.Base(targetPath)
+			timestamp := time.Now().Format("20060102-150405")
+			snapshotPath := filepath.Join(backupDir, fmt.Sprintf("%s.%s.bak", baseName, timestamp))
+			_ = os.WriteFile(snapshotPath, oldData, 0o644)
+
+			// Prune old snapshots (keep latest 10)
+			pruneConfigBackups(backupDir, baseName, 10)
+		}
+	}
+
+	// 2. Write to .tmp file
+	tmpPath := targetPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return err
+	}
+
+	// 3. Atomically replace targetPath with .tmp
+	if goruntime.GOOS == "windows" {
+		_ = os.Remove(targetPath)
+	}
+	if err := os.Rename(tmpPath, targetPath); err != nil {
+		// Fallback: direct write if rename fails
+		return os.WriteFile(targetPath, data, 0o644)
+	}
+	return nil
+}
+
+func pruneConfigBackups(dir, baseName string, maxKeep int) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	var matches []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), baseName+".") && strings.HasSuffix(e.Name(), ".bak") {
+			matches = append(matches, filepath.Join(dir, e.Name()))
+		}
+	}
+	if len(matches) > maxKeep {
+		sort.Strings(matches)
+		for i := 0; i < len(matches)-maxKeep; i++ {
+			_ = os.Remove(matches[i])
+		}
+	}
 }
 
 // instanceGameDir resolves the per-instance game folder. Dir == "" means the
@@ -767,8 +854,8 @@ func (a *App) GetModpackDetails(source, idOrSlug string) (*launcher.ModpackDetai
 	return a.l.GetModpackDetails(ctx, source, idOrSlug)
 }
 
-// InstallModpack downloads and installs a modpack from Modrinth or CurseForge.
-func (a *App) InstallModpack(source, downloadURL, customName string) (*Instance, error) {
+// InstallModpack downloads and installs a modpack from Modrinth, CurseForge or FTB.
+func (a *App) InstallModpack(source, downloadURL, customName, packID, versionID, versionName string) (*Instance, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
@@ -784,13 +871,17 @@ func (a *App) InstallModpack(source, downloadURL, customName string) (*Instance,
 
 	list := a.loadInstances()
 	newInst := Instance{
-		ID:            info.ID,
-		Name:          info.Name,
-		VersionID:     info.VersionID,
-		Loader:        info.Loader,
-		LoaderVersion: info.LoaderVersion,
-		Dir:           info.ID,
-		Created:       time.Now().Unix(),
+		ID:                 info.ID,
+		Name:               info.Name,
+		VersionID:          info.VersionID,
+		Loader:             info.Loader,
+		LoaderVersion:      info.LoaderVersion,
+		Dir:                info.ID,
+		Created:            time.Now().Unix(),
+		ModpackSource:      source,
+		ModpackID:          packID,
+		ModpackVersionID:   versionID,
+		ModpackVersionName: versionName,
 	}
 
 	gameDir := a.instanceGameDir(newInst)
@@ -823,6 +914,159 @@ func (a *App) InstallModpack(source, downloadURL, customName string) (*Instance,
 	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
 
 	return &newInst, nil
+}
+
+type ModpackUpdateInfo struct {
+	HasUpdate       bool   `json:"hasUpdate"`
+	CurrentVersion  string `json:"currentVersion"`
+	LatestVersion   string `json:"latestVersion"`
+	LatestVersionID string `json:"latestVersionId"`
+	DownloadURL     string `json:"downloadUrl"`
+	Changelog       string `json:"changelog"`
+	ReleaseDate     string `json:"releaseDate"`
+}
+
+func (a *App) findInstance(id string) (*Instance, error) {
+	for _, inst := range a.loadInstances() {
+		if inst.ID == id {
+			return &inst, nil
+		}
+	}
+	return nil, fmt.Errorf("instance %q not found", id)
+}
+
+// CheckInstanceModpackUpdate checks if there is a newer version of the upstream modpack.
+func (a *App) CheckInstanceModpackUpdate(instanceID string) (*ModpackUpdateInfo, error) {
+	inst, err := a.findInstance(instanceID)
+	if err != nil {
+		return nil, err
+	}
+
+	if inst.ModpackSource == "" || inst.ModpackID == "" {
+		return &ModpackUpdateInfo{HasUpdate: false}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	details, err := a.l.GetModpackDetails(ctx, inst.ModpackSource, inst.ModpackID)
+	if err != nil || details == nil || len(details.Versions) == 0 {
+		return &ModpackUpdateInfo{HasUpdate: false}, nil
+	}
+
+	latest := details.Versions[0]
+	hasUpdate := false
+	if inst.ModpackVersionID != "" && latest.ID != inst.ModpackVersionID {
+		hasUpdate = true
+	} else if inst.ModpackVersionName != "" && latest.VersionNumber != "" && latest.VersionNumber != inst.ModpackVersionName {
+		hasUpdate = true
+	}
+
+	return &ModpackUpdateInfo{
+		HasUpdate:       hasUpdate,
+		CurrentVersion:  inst.ModpackVersionName,
+		LatestVersion:   latest.VersionNumber,
+		LatestVersionID: latest.ID,
+		DownloadURL:     latest.DownloadURL,
+		Changelog:       latest.Changelog,
+		ReleaseDate:     latest.DatePublished,
+	}, nil
+}
+
+// UpdateInstanceModpack updates an existing instance to a newer version of the modpack, preserving saves and settings.
+func (a *App) UpdateInstanceModpack(instanceID, newDownloadURL, newVersionID, newVersionName string) (*Instance, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	inst, err := a.findInstance(instanceID)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	progressFn := func(p launcher.ModpackProgress) {
+		runtime.EventsEmit(a.ctx, "modpack-progress", p)
+	}
+
+	progressFn(launcher.ModpackProgress{
+		Stage:   "downloading",
+		Percent: 0.05,
+		Message: fmt.Sprintf("Подготовка обновления сборки «%s»...", inst.Name),
+	})
+
+	gameDir := a.instanceGameDir(*inst)
+
+	// 1. Temporarily backup mods in case of rollback
+	modsDir := filepath.Join(gameDir, "mods")
+	oldModsBackup := filepath.Join(gameDir, ".wailauncher", "mods_backup_before_update")
+	_ = os.RemoveAll(oldModsBackup)
+	_ = os.MkdirAll(filepath.Dir(oldModsBackup), 0755)
+	if st, err := os.Stat(modsDir); err == nil && st.IsDir() {
+		_ = os.Rename(modsDir, oldModsBackup)
+	}
+	_ = os.MkdirAll(modsDir, 0755)
+
+	// 2. Perform installation of new version files
+	info, err := a.l.InstallModpackFromURL(ctx, inst.ModpackSource, newDownloadURL, inst.Name, progressFn)
+	if err != nil {
+		// Rollback old mods on error
+		_ = os.RemoveAll(modsDir)
+		_ = os.Rename(oldModsBackup, modsDir)
+		progressFn(launcher.ModpackProgress{Stage: "error", Percent: 0, Message: fmt.Sprintf("Ошибка обновления: %v", err)})
+		return nil, err
+	}
+
+	// 3. Move newly downloaded pack files from its temp folder into this instance's gameDir
+	newGameDir := a.l.InstanceDir(info.ID)
+	if newGameDir != gameDir {
+		entries, err := os.ReadDir(newGameDir)
+		if err == nil {
+			for _, entry := range entries {
+				name := entry.Name()
+				if name == "saves" || name == "screenshots" || name == "options.txt" || name == "servers.dat" {
+					continue // preserve user's personal data
+				}
+				srcItem := filepath.Join(newGameDir, name)
+				dstItem := filepath.Join(gameDir, name)
+				if entry.IsDir() {
+					_ = copyDirectory(srcItem, dstItem)
+				} else {
+					_ = copySingleFile(srcItem, dstItem)
+				}
+			}
+		}
+		_ = os.RemoveAll(newGameDir)
+	}
+
+	// Remove old mods backup
+	_ = os.RemoveAll(oldModsBackup)
+
+	// 4. Update instance metadata
+	list := a.loadInstances()
+	for i := range list {
+		if list[i].ID == instanceID {
+			list[i].VersionID = info.VersionID
+			list[i].Loader = info.Loader
+			list[i].LoaderVersion = info.LoaderVersion
+			list[i].ModpackVersionID = newVersionID
+			list[i].ModpackVersionName = newVersionName
+			inst = &list[i]
+			break
+		}
+	}
+
+	_ = a.saveInstances(list)
+	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+
+	progressFn(launcher.ModpackProgress{
+		Stage:   "done",
+		Percent: 1.0,
+		Message: fmt.Sprintf("Сборка «%s» успешно обновлена до версии %s!", inst.Name, newVersionName),
+	})
+
+	return inst, nil
 }
 
 // GetInstanceAllContent retrieves all mods, resourcepacks, shaderpacks, and datapacks.
@@ -1031,7 +1275,7 @@ func (a *App) PickInstanceIcon(instanceID string) (string, error) {
 }
 
 // UpdateInstanceSettings updates name, server address, version, loader, and loader version.
-func (a *App) UpdateInstanceSettings(instanceID, name, serverAddress, versionID, loader, loaderVersion string) (*Instance, error) {
+func (a *App) UpdateInstanceSettings(instanceID, name, serverAddress, versionID, loader, loaderVersion, group string) (*Instance, error) {
 	list := a.loadInstances()
 	var target *Instance
 	for i := range list {
@@ -1048,6 +1292,7 @@ func (a *App) UpdateInstanceSettings(instanceID, name, serverAddress, versionID,
 		target.Name = name
 	}
 	target.ServerAddress = strings.TrimSpace(serverAddress)
+	target.Group = strings.TrimSpace(group)
 	versionID = strings.TrimSpace(versionID)
 	if versionID != "" {
 		target.VersionID = versionID
@@ -1610,6 +1855,217 @@ func (a *App) ImportInstanceFile(filePath string) (*Instance, error) {
 	return &newInst, nil
 }
 
+// CreateGroup creates a new custom folder / group if it doesn't already exist.
+func (a *App) CreateGroup(name string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("group name cannot be empty")
+	}
+	for _, g := range a.set.Groups {
+		if strings.EqualFold(g, name) {
+			return nil
+		}
+	}
+	a.set.Groups = append(a.set.Groups, name)
+	if err := a.set.save(); err != nil {
+		return err
+	}
+	runtime.EventsEmit(a.ctx, "settings-updated", a.set)
+	return nil
+}
 
+// RenameGroup renames a group and updates all instances belonging to it.
+func (a *App) RenameGroup(oldName, newName string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
+	oldName = strings.TrimSpace(oldName)
+	newName = strings.TrimSpace(newName)
+	if oldName == "" || newName == "" {
+		return fmt.Errorf("group names cannot be empty")
+	}
+
+	found := false
+	for i, g := range a.set.Groups {
+		if strings.EqualFold(g, oldName) {
+			a.set.Groups[i] = newName
+			found = true
+			break
+		}
+	}
+	if !found {
+		a.set.Groups = append(a.set.Groups, newName)
+	}
+	_ = a.set.save()
+
+	list := a.loadInstances()
+	changed := false
+	for i := range list {
+		if strings.EqualFold(list[i].Group, oldName) {
+			list[i].Group = newName
+			changed = true
+		}
+	}
+	if changed {
+		_ = a.saveInstances(list)
+	}
+
+	runtime.EventsEmit(a.ctx, "settings-updated", a.set)
+	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	return nil
+}
+
+// DeleteGroup removes a group and unassigns instances belonging to it.
+func (a *App) DeleteGroup(name string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+
+	newGroups := make([]string, 0, len(a.set.Groups))
+	for _, g := range a.set.Groups {
+		if !strings.EqualFold(g, name) {
+			newGroups = append(newGroups, g)
+		}
+	}
+	a.set.Groups = newGroups
+	_ = a.set.save()
+
+	list := a.loadInstances()
+	changed := false
+	for i := range list {
+		if strings.EqualFold(list[i].Group, name) {
+			list[i].Group = ""
+			changed = true
+		}
+	}
+	if changed {
+		_ = a.saveInstances(list)
+	}
+
+	runtime.EventsEmit(a.ctx, "settings-updated", a.set)
+	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	return nil
+}
+
+// UpdateInstanceGroup updates the folder/category name of an instance.
+func (a *App) UpdateInstanceGroup(instanceID, group string) (*Instance, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	group = strings.TrimSpace(group)
+	list := a.loadInstances()
+	var found *Instance
+	for i := range list {
+		if list[i].ID == instanceID {
+			list[i].Group = group
+			found = &list[i]
+			break
+		}
+	}
+	if found == nil {
+		return nil, fmt.Errorf("instance not found: %s", instanceID)
+	}
+	if err := a.saveInstances(list); err != nil {
+		return nil, err
+	}
+
+	if group != "" {
+		hasGroup := false
+		for _, g := range a.set.Groups {
+			if strings.EqualFold(g, group) {
+				hasGroup = true
+				break
+			}
+		}
+		if !hasGroup {
+			a.set.Groups = append(a.set.Groups, group)
+			_ = a.set.save()
+			runtime.EventsEmit(a.ctx, "settings-updated", a.set)
+		}
+	}
+
+	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	return found, nil
+}
+
+// ReorderInstances updates the sort order of instances based on the ordered list of IDs.
+func (a *App) ReorderInstances(orderedIDs []string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	list := a.loadInstances()
+	idMap := make(map[string]int, len(orderedIDs))
+	for idx, id := range orderedIDs {
+		idMap[id] = idx
+	}
+
+	for i := range list {
+		if idx, ok := idMap[list[i].ID]; ok {
+			list[i].SortOrder = idx
+		}
+	}
+
+	sort.SliceStable(list, func(i, j int) bool {
+		return list[i].SortOrder < list[j].SortOrder
+	})
+
+	if err := a.saveInstances(list); err != nil {
+		return err
+	}
+	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	return nil
+}
+
+// VerifyInstanceFiles forcibly checks SHA1 and sizes of client jar, libraries, and assets for an instance.
+func (a *App) VerifyInstanceFiles(instanceID string) (VerifyResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	var target *Instance
+	for _, inst := range a.loadInstances() {
+		if inst.ID == instanceID {
+			target = &inst
+			break
+		}
+	}
+	if target == nil {
+		return VerifyResult{}, fmt.Errorf("instance not found: %s", instanceID)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	emit := func(p launcher.ProgressEvent) {
+		runtime.EventsEmit(a.ctx, "verify-progress", p)
+	}
+
+	var v *launcher.VersionJSON
+	var err error
+	if target.Loader != "" && target.Loader != "vanilla" {
+		v, err = a.l.ResolveLoaderVersion(ctx, target.Loader, target.LoaderVersion, target.VersionID, emit, nil)
+	} else {
+		v, err = a.l.LoadVersion(ctx, target.VersionID)
+	}
+	if err != nil {
+		return VerifyResult{}, fmt.Errorf("load version manifest: %w", err)
+	}
+
+	total, repaired, err := a.l.VerifyAndRepair(ctx, v, emit)
+	if err != nil {
+		return VerifyResult{TotalChecked: total, Repaired: repaired, Failed: 1, Details: []string{err.Error()}}, err
+	}
+
+	return VerifyResult{
+		TotalChecked: total,
+		Repaired:     repaired,
+		Failed:       0,
+		Details:      []string{fmt.Sprintf("Проверено %d файлов. Все компоненты сборки целостны.", total)},
+	}, nil
+}

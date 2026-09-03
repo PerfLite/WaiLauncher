@@ -14,6 +14,8 @@ export function CheckCurseForgeDependencies(arg1:string,arg2:string):Promise<Arr
 
 export function CheckInstanceModUpdates(arg1:string):Promise<Record<string, launcher.ContentItem>>;
 
+export function CheckInstanceModpackUpdate(arg1:string):Promise<main.ModpackUpdateInfo>;
+
 export function CheckJavaUpdates():Promise<Array<launcher.JavaUpdateInfo>>;
 
 export function CheckLauncherUpdate():Promise<main.UpdateInfo>;
@@ -26,7 +28,11 @@ export function ClearCache():Promise<launcher.CacheInfo>;
 
 export function CloneInstance(arg1:string):Promise<main.Instance>;
 
+export function CreateGroup(arg1:string):Promise<void>;
+
 export function CreateInstance(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.Instance>;
+
+export function DeleteGroup(arg1:string):Promise<void>;
 
 export function DeleteInstance(arg1:string):Promise<string>;
 
@@ -37,6 +43,8 @@ export function DeleteInstanceScreenshot(arg1:string,arg2:string):Promise<void>;
 export function DeleteInstanceWorld(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteMod(arg1:string,arg2:string):Promise<void>;
+
+export function DetectInstalledLaunchers():Promise<Array<main.DetectedLauncher>>;
 
 export function DownloadLauncherUpdate():Promise<void>;
 
@@ -84,6 +92,8 @@ export function ImportInstanceDialog():Promise<main.Instance>;
 
 export function ImportInstanceFile(arg1:string):Promise<main.Instance>;
 
+export function ImportSelectedInstances(arg1:Array<string>):Promise<Array<main.Instance>>;
+
 export function InstallCurseForgeMod(arg1:string,arg2:string,arg3:string):Promise<launcher.ModItem>;
 
 export function InstallCurseForgeModWithDependencies(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<launcher.ModItem>;
@@ -92,7 +102,7 @@ export function InstallJavaRuntime(arg1:number):Promise<void>;
 
 export function InstallModWithDependencies(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<launcher.ModItem>;
 
-export function InstallModpack(arg1:string,arg2:string,arg3:string):Promise<main.Instance>;
+export function InstallModpack(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<main.Instance>;
 
 export function InstallModrinthMod(arg1:string,arg2:string,arg3:string):Promise<launcher.ModItem>;
 
@@ -116,6 +126,8 @@ export function PickInstanceIcon(arg1:string):Promise<string>;
 
 export function PickJavaPath():Promise<string>;
 
+export function PickLauncherFolder():Promise<string>;
+
 export function PickSkinFile():Promise<main.FilePickResult>;
 
 export function Play(arg1:string):Promise<void>;
@@ -128,7 +140,13 @@ export function RefreshVersions():Promise<main.StatePayload>;
 
 export function RemoveAccount(arg1:string):Promise<void>;
 
+export function RenameGroup(arg1:string,arg2:string):Promise<void>;
+
+export function ReorderInstances(arg1:Array<string>):Promise<void>;
+
 export function SaveSettings(arg1:main.Settings):Promise<void>;
+
+export function ScanCustomLauncherDir(arg1:string):Promise<main.DetectedLauncher>;
 
 export function SearchCurseForgeMods(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<launcher.ModrinthSearchResponse>;
 
@@ -158,11 +176,17 @@ export function TranslateArticle(arg1:string,arg2:string):Promise<launcher.Artic
 
 export function UninstallJavaRuntime(arg1:number):Promise<void>;
 
+export function UpdateInstanceGroup(arg1:string,arg2:string):Promise<main.Instance>;
+
 export function UpdateInstanceLaunchConfig(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string,arg6:boolean,arg7:boolean,arg8:number,arg9:number):Promise<main.Instance>;
 
 export function UpdateInstanceMod(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function UpdateInstanceSettings(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<main.Instance>;
+export function UpdateInstanceModpack(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.Instance>;
+
+export function UpdateInstanceSettings(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<main.Instance>;
+
+export function VerifyInstanceFiles(arg1:string):Promise<main.VerifyResult>;
 
 export function WindowClose():Promise<void>;
 

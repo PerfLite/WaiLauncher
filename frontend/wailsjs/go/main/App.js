@@ -22,6 +22,10 @@ export function CheckInstanceModUpdates(arg1) {
   return window['go']['main']['App']['CheckInstanceModUpdates'](arg1);
 }
 
+export function CheckInstanceModpackUpdate(arg1) {
+  return window['go']['main']['App']['CheckInstanceModpackUpdate'](arg1);
+}
+
 export function CheckJavaUpdates() {
   return window['go']['main']['App']['CheckJavaUpdates']();
 }
@@ -46,8 +50,16 @@ export function CloneInstance(arg1) {
   return window['go']['main']['App']['CloneInstance'](arg1);
 }
 
+export function CreateGroup(arg1) {
+  return window['go']['main']['App']['CreateGroup'](arg1);
+}
+
 export function CreateInstance(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateInstance'](arg1, arg2, arg3, arg4);
+}
+
+export function DeleteGroup(arg1) {
+  return window['go']['main']['App']['DeleteGroup'](arg1);
 }
 
 export function DeleteInstance(arg1) {
@@ -68,6 +80,10 @@ export function DeleteInstanceWorld(arg1, arg2) {
 
 export function DeleteMod(arg1, arg2) {
   return window['go']['main']['App']['DeleteMod'](arg1, arg2);
+}
+
+export function DetectInstalledLaunchers() {
+  return window['go']['main']['App']['DetectInstalledLaunchers']();
 }
 
 export function DownloadLauncherUpdate() {
@@ -162,6 +178,10 @@ export function ImportInstanceFile(arg1) {
   return window['go']['main']['App']['ImportInstanceFile'](arg1);
 }
 
+export function ImportSelectedInstances(arg1) {
+  return window['go']['main']['App']['ImportSelectedInstances'](arg1);
+}
+
 export function InstallCurseForgeMod(arg1, arg2, arg3) {
   return window['go']['main']['App']['InstallCurseForgeMod'](arg1, arg2, arg3);
 }
@@ -178,8 +198,8 @@ export function InstallModWithDependencies(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['InstallModWithDependencies'](arg1, arg2, arg3, arg4);
 }
 
-export function InstallModpack(arg1, arg2, arg3) {
-  return window['go']['main']['App']['InstallModpack'](arg1, arg2, arg3);
+export function InstallModpack(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['InstallModpack'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function InstallModrinthMod(arg1, arg2, arg3) {
@@ -226,6 +246,10 @@ export function PickJavaPath() {
   return window['go']['main']['App']['PickJavaPath']();
 }
 
+export function PickLauncherFolder() {
+  return window['go']['main']['App']['PickLauncherFolder']();
+}
+
 export function PickSkinFile() {
   return window['go']['main']['App']['PickSkinFile']();
 }
@@ -250,8 +274,20 @@ export function RemoveAccount(arg1) {
   return window['go']['main']['App']['RemoveAccount'](arg1);
 }
 
+export function RenameGroup(arg1, arg2) {
+  return window['go']['main']['App']['RenameGroup'](arg1, arg2);
+}
+
+export function ReorderInstances(arg1) {
+  return window['go']['main']['App']['ReorderInstances'](arg1);
+}
+
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
+}
+
+export function ScanCustomLauncherDir(arg1) {
+  return window['go']['main']['App']['ScanCustomLauncherDir'](arg1);
 }
 
 export function SearchCurseForgeMods(arg1, arg2, arg3, arg4, arg5, arg6) {
@@ -310,6 +346,10 @@ export function UninstallJavaRuntime(arg1) {
   return window['go']['main']['App']['UninstallJavaRuntime'](arg1);
 }
 
+export function UpdateInstanceGroup(arg1, arg2) {
+  return window['go']['main']['App']['UpdateInstanceGroup'](arg1, arg2);
+}
+
 export function UpdateInstanceLaunchConfig(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
   return window['go']['main']['App']['UpdateInstanceLaunchConfig'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
 }
@@ -318,8 +358,16 @@ export function UpdateInstanceMod(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateInstanceMod'](arg1, arg2, arg3, arg4);
 }
 
-export function UpdateInstanceSettings(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['main']['App']['UpdateInstanceSettings'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function UpdateInstanceModpack(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['UpdateInstanceModpack'](arg1, arg2, arg3, arg4);
+}
+
+export function UpdateInstanceSettings(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['UpdateInstanceSettings'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
+export function VerifyInstanceFiles(arg1) {
+  return window['go']['main']['App']['VerifyInstanceFiles'](arg1);
 }
 
 export function WindowClose() {

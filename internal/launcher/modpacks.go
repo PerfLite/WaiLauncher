@@ -21,11 +21,12 @@ import (
 
 const curseForgeAPI = "https://api.curseforge.com/v1"
 const curseForgeKey = "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC"
+const ftbAPI = "https://api.feed-the-beast.com/v1/modpacks/public/modpack"
 
-// ModpackItem is a unified representation of a modpack from Modrinth or CurseForge.
+// ModpackItem is a unified representation of a modpack from Modrinth, CurseForge or FTB.
 type ModpackItem struct {
 	ID           string   `json:"id"`
-	Source       string   `json:"source"` // "modrinth" | "curseforge"
+	Source       string   `json:"source"` // "modrinth" | "curseforge" | "ftb"
 	Title        string   `json:"title"`
 	Slug         string   `json:"slug"`
 	Author       string   `json:"author"`
@@ -70,7 +71,7 @@ type ModpackProgress struct {
 	Total   int     `json:"total"`
 }
 
-// SearchModpacks searches Modrinth or CurseForge for modpacks.
+// SearchModpacks searches Modrinth, CurseForge or FTB for modpacks.
 func (l *Launcher) SearchModpacks(ctx context.Context, source, query, mcVersion, loader string, offset, limit int) ([]ModpackItem, error) {
 	if limit <= 0 {
 		limit = 30
@@ -78,6 +79,9 @@ func (l *Launcher) SearchModpacks(ctx context.Context, source, query, mcVersion,
 	source = strings.ToLower(source)
 	if source == "curseforge" {
 		return l.searchCurseForgeModpacks(ctx, query, mcVersion, loader, offset, limit)
+	}
+	if source == "ftb" {
+		return l.searchFTBModpacks(ctx, query, mcVersion, loader, offset, limit)
 	}
 	return l.searchModrinthModpacks(ctx, query, mcVersion, loader, offset, limit)
 }
@@ -282,11 +286,14 @@ func (l *Launcher) searchCurseForgeModpacks(ctx context.Context, query, mcVersio
 	return items, nil
 }
 
-// GetModpackDetails fetches full details and versions for a Modrinth or CurseForge modpack.
+// GetModpackDetails fetches full details and versions for a Modrinth, CurseForge or FTB modpack.
 func (l *Launcher) GetModpackDetails(ctx context.Context, source, idOrSlug string) (*ModpackDetails, error) {
 	source = strings.ToLower(source)
 	if source == "curseforge" {
 		return l.getCurseForgeModpackDetails(ctx, idOrSlug)
+	}
+	if source == "ftb" {
+		return l.getFTBModpackDetails(ctx, idOrSlug)
 	}
 	return l.getModrinthModpackDetails(ctx, idOrSlug)
 }
@@ -559,7 +566,7 @@ type InstalledPackInfo struct {
 	LoaderVersion string `json:"loaderVersion"`
 }
 
-// InstallModpackFromURL downloads and installs a Modrinth (.mrpack) or CurseForge modpack.
+// InstallModpackFromURL downloads and installs a Modrinth (.mrpack), CurseForge or FTB modpack.
 func (l *Launcher) InstallModpackFromURL(
 	ctx context.Context,
 	source, downloadURL, customName string,
@@ -567,6 +574,10 @@ func (l *Launcher) InstallModpackFromURL(
 ) (*InstalledPackInfo, error) {
 	if progressFn == nil {
 		progressFn = func(p ModpackProgress) {}
+	}
+
+	if strings.ToLower(source) == "ftb" || strings.Contains(downloadURL, "api.feed-the-beast.com") {
+		return l.installFTBPack(ctx, downloadURL, customName, progressFn)
 	}
 
 	progressFn(ModpackProgress{Stage: "downloading", Percent: 0.05, Message: "Скачивание архива сборки…"})
@@ -1153,3 +1164,448 @@ func sanitizeID(name string) string {
 	}
 	return s
 }
+
+// searchFTBModpacks searches the Feed The Beast public API.
+func (l *Launcher) searchFTBModpacks(ctx context.Context, query, mcVersion, loader string, offset, limit int) ([]ModpackItem, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	trimmedQuery := strings.TrimSpace(query)
+	var searchURL string
+	if trimmedQuery == "" {
+		searchURL = fmt.Sprintf("%s/popular/installs/%d", ftbAPI, limit)
+	} else {
+		searchURL = fmt.Sprintf("%s/search/%d?term=%s", ftbAPI, limit, url.QueryEscape(trimmedQuery))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "WaiLauncher/0.1.0")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("FTB search returned %d", resp.StatusCode)
+	}
+
+	var res struct {
+		Packs []int `json:"packs"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+
+	if len(res.Packs) == 0 {
+		return nil, nil
+	}
+
+	type ftbPackDetails struct {
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		Synopsis    string `json:"synopsis"`
+		Description string `json:"description"`
+		Art         []struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"art"`
+		Authors []struct {
+			Name string `json:"name"`
+		} `json:"authors"`
+		Installs int64 `json:"installs"`
+		Plays    int64 `json:"plays"`
+		Targets  []struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+			Type    string `json:"type"`
+		} `json:"targets"`
+		Updated int64 `json:"updated"`
+	}
+
+	items := make([]ModpackItem, len(res.Packs))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for i, pid := range res.Packs {
+		wg.Add(1)
+		go func(idx, packID int) {
+			defer wg.Done()
+			pReq, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%d", ftbAPI, packID), nil)
+			if err != nil {
+				return
+			}
+			pReq.Header.Set("User-Agent", "WaiLauncher/0.1.0")
+			pResp, err := httpClient.Do(pReq)
+			if err != nil {
+				return
+			}
+			defer pResp.Body.Close()
+			if pResp.StatusCode != http.StatusOK {
+				return
+			}
+
+			var pd ftbPackDetails
+			if err := json.NewDecoder(pResp.Body).Decode(&pd); err != nil {
+				return
+			}
+
+			var iconURL, bannerURL string
+			for _, a := range pd.Art {
+				if a.Type == "square" && iconURL == "" {
+					iconURL = a.URL
+				} else if a.Type == "logo" && iconURL == "" {
+					iconURL = a.URL
+				} else if a.Type == "splash" && bannerURL == "" {
+					bannerURL = a.URL
+				}
+			}
+			if iconURL == "" && len(pd.Art) > 0 {
+				iconURL = pd.Art[0].URL
+			}
+
+			var author string
+			if len(pd.Authors) > 0 {
+				author = pd.Authors[0].Name
+			}
+
+			var gVers []string
+			for _, t := range pd.Targets {
+				if t.Name == "minecraft" && t.Version != "" {
+					gVers = append(gVers, t.Version)
+				}
+			}
+
+			downloads := pd.Installs
+			if pd.Plays > downloads {
+				downloads = pd.Plays
+			}
+
+			desc := pd.Synopsis
+			if desc == "" {
+				desc = pd.Description
+				if len(desc) > 200 {
+					desc = desc[:200] + "..."
+				}
+			}
+
+			mu.Lock()
+			items[idx] = ModpackItem{
+				ID:           fmt.Sprintf("%d", pd.ID),
+				Source:       "ftb",
+				Title:        pd.Name,
+				Slug:         pd.Slug,
+				Author:       author,
+				Description:  desc,
+				IconURL:      iconURL,
+				BannerURL:    bannerURL,
+				Downloads:    downloads,
+				GameVersions: gVers,
+				DateModified: time.Unix(pd.Updated, 0).Format(time.RFC3339),
+			}
+			mu.Unlock()
+		}(i, pid)
+	}
+	wg.Wait()
+
+	var result []ModpackItem
+	for _, it := range items {
+		if it.ID != "" {
+			if mcVersion != "" && mcVersion != "all" {
+				match := false
+				for _, v := range it.GameVersions {
+					if strings.HasPrefix(v, mcVersion) {
+						match = true
+						break
+					}
+				}
+				if !match && len(it.GameVersions) > 0 {
+					continue
+				}
+			}
+			result = append(result, it)
+		}
+	}
+	return result, nil
+}
+
+// getFTBModpackDetails fetches full metadata and available versions for an FTB pack.
+func (l *Launcher) getFTBModpackDetails(ctx context.Context, idOrSlug string) (*ModpackDetails, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/%s", ftbAPI, url.PathEscape(idOrSlug)), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "WaiLauncher/0.1.0")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("FTB modpack status %d", resp.StatusCode)
+	}
+
+	var p struct {
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		Synopsis    string `json:"synopsis"`
+		Description string `json:"description"`
+		Art         []struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"art"`
+		Authors []struct {
+			Name string `json:"name"`
+		} `json:"authors"`
+		Installs int64 `json:"installs"`
+		Plays    int64 `json:"plays"`
+		Targets  []struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		} `json:"targets"`
+		Versions []struct {
+			ID      int    `json:"id"`
+			Name    string `json:"name"`
+			Type    string `json:"type"`
+			Updated int64  `json:"updated"`
+		} `json:"versions"`
+		Updated int64 `json:"updated"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		return nil, err
+	}
+
+	var iconURL, bannerURL string
+	for _, a := range p.Art {
+		if a.Type == "square" && iconURL == "" {
+			iconURL = a.URL
+		} else if a.Type == "logo" && iconURL == "" {
+			iconURL = a.URL
+		} else if a.Type == "splash" && bannerURL == "" {
+			bannerURL = a.URL
+		}
+	}
+	if iconURL == "" && len(p.Art) > 0 {
+		iconURL = p.Art[0].URL
+	}
+
+	var author string
+	if len(p.Authors) > 0 {
+		author = p.Authors[0].Name
+	}
+
+	var gVers []string
+	for _, t := range p.Targets {
+		if t.Name == "minecraft" && t.Version != "" {
+			gVers = append(gVers, t.Version)
+		}
+	}
+
+	downloads := p.Installs
+	if p.Plays > downloads {
+		downloads = p.Plays
+	}
+
+	var verItems []ModpackVersionItem
+	for _, v := range p.Versions {
+		dlURL := fmt.Sprintf("%s/%d/%d", ftbAPI, p.ID, v.ID)
+		verItems = append(verItems, ModpackVersionItem{
+			ID:            fmt.Sprintf("%d", v.ID),
+			Name:          v.Name,
+			VersionNumber: v.Name,
+			GameVersions:  gVers,
+			DatePublished: time.Unix(v.Updated, 0).Format(time.RFC3339),
+			DownloadURL:   dlURL,
+			FileName:      fmt.Sprintf("%s-%s.json", p.Slug, v.Name),
+		})
+	}
+
+	// FTB API returns versions in chronological ascending order (oldest first).
+	// Reverse so that the newest release is first (index 0).
+	for i, j := 0, len(verItems)-1; i < j; i, j = i+1, j-1 {
+		verItems[i], verItems[j] = verItems[j], verItems[i]
+	}
+
+	return &ModpackDetails{
+		Item: ModpackItem{
+			ID:           fmt.Sprintf("%d", p.ID),
+			Source:       "ftb",
+			Title:        p.Name,
+			Slug:         p.Slug,
+			Author:       author,
+			Description:  p.Synopsis,
+			IconURL:      iconURL,
+			BannerURL:    bannerURL,
+			Downloads:    downloads,
+			GameVersions: gVers,
+			DateModified: time.Unix(p.Updated, 0).Format(time.RFC3339),
+		},
+		Versions: verItems,
+		Body:     p.Description,
+	}, nil
+}
+
+// installFTBPack downloads and installs an FTB modpack from its version manifest URL.
+func (l *Launcher) installFTBPack(
+	ctx context.Context,
+	manifestURL, customName string,
+	progressFn func(ModpackProgress),
+) (*InstalledPackInfo, error) {
+	progressFn(ModpackProgress{Stage: "downloading", Percent: 0.05, Message: "Загрузка манифеста FTB…"})
+
+	req, err := http.NewRequestWithContext(ctx, "GET", manifestURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "WaiLauncher/0.1.0")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch FTB manifest: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("FTB manifest returned %d", resp.StatusCode)
+	}
+
+	var m struct {
+		ID      int    `json:"id"`
+		Name    string `json:"name"`
+		Parent  int    `json:"parent"`
+		Targets []struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+			Type    string `json:"type"`
+		} `json:"targets"`
+		Files []struct {
+			ID         int64  `json:"id"`
+			Name       string `json:"name"`
+			Path       string `json:"path"`
+			URL        string `json:"url"`
+			SHA1       string `json:"sha1"`
+			Size       int64  `json:"size"`
+			ServerOnly bool   `json:"serveronly"`
+		} `json:"files"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return nil, fmt.Errorf("decode FTB manifest: %w", err)
+	}
+
+	packName := m.Name
+	if customName != "" {
+		packName = customName
+	}
+	if packName == "" {
+		packName = fmt.Sprintf("FTB Pack %d", m.Parent)
+	}
+
+	mcVer := "1.20.1"
+	loader := "forge"
+	loaderVer := ""
+
+	for _, t := range m.Targets {
+		switch strings.ToLower(t.Name) {
+		case "minecraft":
+			mcVer = t.Version
+		case "forge":
+			loader = "forge"
+			loaderVer = t.Version
+		case "neoforge":
+			loader = "neoforge"
+			loaderVer = t.Version
+		case "fabric":
+			loader = "fabric"
+			loaderVer = t.Version
+		}
+	}
+
+	instID := fmt.Sprintf("ftb_%d_%s", time.Now().UnixNano()%1000000, sanitizeID(packName))
+	instDir := l.InstanceDir(instID)
+	if err := os.MkdirAll(instDir, 0755); err != nil {
+		return nil, err
+	}
+
+	var clientFiles []struct {
+		ID         int64  `json:"id"`
+		Name       string `json:"name"`
+		Path       string `json:"path"`
+		URL        string `json:"url"`
+		SHA1       string `json:"sha1"`
+		Size       int64  `json:"size"`
+		ServerOnly bool   `json:"serveronly"`
+	}
+	for _, f := range m.Files {
+		if !f.ServerOnly && f.URL != "" {
+			clientFiles = append(clientFiles, f)
+		}
+	}
+
+	total := len(clientFiles)
+	var downloaded int64
+	var mu sync.Mutex
+
+	concurrency := 12
+	if total < concurrency {
+		concurrency = max(1, total)
+	}
+	jobs := make(chan int, total)
+	for i := range clientFiles {
+		jobs <- i
+	}
+	close(jobs)
+
+	var wg sync.WaitGroup
+
+	for w := 0; w < concurrency; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range jobs {
+				f := clientFiles[idx]
+				relPath := filepath.Clean(strings.TrimPrefix(f.Path, "./"))
+				destDir := filepath.Join(instDir, relPath)
+				_ = os.MkdirAll(destDir, 0755)
+				destFile := filepath.Join(destDir, f.Name)
+
+				_ = downloadModWithSha1(ctx, f.URL, destFile, f.SHA1)
+
+				mu.Lock()
+				downloaded++
+				cur := int(downloaded)
+				pct := 0.15 + (float64(cur)/float64(max(1, total)))*0.80
+				mu.Unlock()
+
+				progressFn(ModpackProgress{
+					Stage:   "mods",
+					Percent: pct,
+					Message: fmt.Sprintf("Загрузка файлов (%d/%d): %s", cur, total, f.Name),
+					Current: cur,
+					Total:   total,
+				})
+			}
+		}()
+	}
+	wg.Wait()
+
+	progressFn(ModpackProgress{Stage: "done", Percent: 1.0, Message: "Установка сборки FTB завершена!"})
+
+	return &InstalledPackInfo{
+		ID:            instID,
+		Name:          packName,
+		VersionID:     mcVer,
+		Loader:        loader,
+		LoaderVersion: loaderVer,
+	}, nil
+}
+

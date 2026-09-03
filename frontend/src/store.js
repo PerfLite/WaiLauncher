@@ -8,7 +8,7 @@ export const store = reactive({
   page: 'home',
   maximized: false,
   ready: false,
-  launcherVer: '1.1.1',
+  launcherVer: '1.1.2',
   dataDir: '',
   versionsErr: '',
   settings: {

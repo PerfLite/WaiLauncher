@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -62,6 +63,10 @@ func fileValid(path, sha1sum string, size int64) bool {
 	if err != nil || st.IsDir() {
 		return false
 	}
+	// Always reject empty 0-byte files
+	if st.Size() == 0 {
+		return false
+	}
 	if size > 0 && st.Size() != size {
 		return false
 	}
@@ -69,7 +74,7 @@ func fileValid(path, sha1sum string, size int64) bool {
 		return true
 	}
 	sum, err := fileSHA1(path)
-	return err == nil && sum == sha1sum
+	return err == nil && strings.EqualFold(sum, sha1sum)
 }
 
 type dlTask struct {
@@ -144,15 +149,26 @@ func downloadAttempt(ctx context.Context, t dlTask) error {
 	_, copyErr := io.Copy(dst, resp.Body)
 	f.Close()
 	if copyErr != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return copyErr
 	}
-	if t.size > 0 {
-		if st, err := os.Stat(tmp); err != nil || st.Size() != t.size {
-			os.Remove(tmp)
-			return fmt.Errorf("size mismatch for %s", t.url)
+	st, err := os.Stat(tmp)
+	if err != nil || st.Size() == 0 {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("downloaded empty file for %s", t.url)
+	}
+	if t.size > 0 && st.Size() != t.size {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("size mismatch for %s (expected %d, got %d)", t.url, t.size, st.Size())
+	}
+	if t.sha1 != "" {
+		sum, err := fileSHA1(tmp)
+		if err != nil || !strings.EqualFold(sum, t.sha1) {
+			_ = os.Remove(tmp)
+			return fmt.Errorf("sha1 mismatch for %s (expected %s, got %s)", t.url, t.sha1, sum)
 		}
 	}
+	_ = os.Remove(t.dest)
 	return os.Rename(tmp, t.dest)
 }
 

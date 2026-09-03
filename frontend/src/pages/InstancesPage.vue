@@ -15,15 +15,31 @@ import {
   GetInstanceScreenshots, DeleteInstanceScreenshot, OpenScreenshotsFolder,
   ExportInstance, ImportInstanceDialog, ImportInstanceFile,
   UpdateInstanceSettings, CloneInstance, GetInstanceCrashReports,
-  UpdateInstanceLaunchConfig, PickJavaPath
+  UpdateInstanceLaunchConfig, PickJavaPath, VerifyInstanceFiles, UpdateInstanceGroup,
+  CheckInstanceModpackUpdate, UpdateInstanceModpack
 } from '../../wailsjs/go/main/App'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
+import modrinthIcon from '../assets/modrinth-icon.png'
+import curseforgeIcon from '../assets/curseforge-icon.png'
+import ftbIcon from '../assets/ftb-icon.png'
+
+function getSourceIcon(src) {
+  if (src === 'modrinth') return modrinthIcon
+  if (src === 'curseforge') return curseforgeIcon
+  if (src === 'ftb') return ftbIcon
+  return null
+}
 
 const currentTab = ref('content') // 'content' | 'worlds' | 'screenshots' | 'logs' | 'crashes'
 const contentTypeFilter = ref('all') // 'all' | 'mod' | 'resourcepack' | 'shaderpack' | 'datapack'
 const searchQuery = ref('')
 const sortOrder = ref('name_asc') // 'name_asc' | 'name_desc' | 'size'
 const sortDropdownOpen = ref(false)
+
+const packUpdateInfo = ref(null)
+const checkingPackUpdate = ref(false)
+const updatingPack = ref(false)
+const showChangelogModal = ref(false)
 
 const allContent = ref([])
 const loadingContent = ref(false)
@@ -48,6 +64,7 @@ const importingInst = ref(false)
 /* Edit Instance Settings */
 const editSettingsOpen = ref(false)
 const editName = ref('')
+const editGroup = ref('')
 const editServer = ref('')
 const editVersion = ref('')
 const editLoader = ref('vanilla')
@@ -57,6 +74,17 @@ const editLoaderVerLoading = ref(false)
 const editLoaderVerErr = ref(false)
 const editVerQuery = ref('')
 const savingSettings = ref(false)
+const verifyingFiles = ref(false)
+
+const availableGroups = computed(() => {
+  const set = new Set()
+  for (const ins of store.instances) {
+    if (ins.group && ins.group.trim()) {
+      set.add(ins.group.trim())
+    }
+  }
+  return Array.from(set).sort()
+})
 
 const loaders = [
   { id: 'vanilla' },
@@ -217,8 +245,54 @@ watch(selectedInst, (inst) => {
     } else if (currentTab.value === 'crashes') {
       loadCrashes()
     }
+    checkModpackUpdate(false)
   }
 }, {immediate: true})
+
+async function checkModpackUpdate(showToast = false) {
+  if (!selectedInst.value || !selectedInst.value.modpackSource || !selectedInst.value.modpackId) {
+    packUpdateInfo.value = null
+    return
+  }
+  checkingPackUpdate.value = true
+  try {
+    const res = await CheckInstanceModpackUpdate(selectedInst.value.id)
+    packUpdateInfo.value = res
+    if (res && res.hasUpdate) {
+      if (showToast) toast(t('pack.updateAvailable', {v: res.latestVersion}))
+    } else {
+      if (showToast) toast(t('pack.noUpdates'))
+    }
+  } catch (e) {
+    if (showToast) toast((t('inst.err') || 'Ошибка: ') + e, true)
+  } finally {
+    checkingPackUpdate.value = false
+  }
+}
+
+async function onUpdateModpack() {
+  if (!selectedInst.value || !packUpdateInfo.value || !packUpdateInfo.value.hasUpdate || updatingPack.value) return
+  updatingPack.value = true
+  showChangelogModal.value = false
+  try {
+    const updated = await UpdateInstanceModpack(
+      selectedInst.value.id,
+      packUpdateInfo.value.downloadUrl,
+      packUpdateInfo.value.latestVersionId,
+      packUpdateInfo.value.latestVersion
+    )
+    if (updated) {
+      store.instances = store.instances.map(i => i.id === updated.id ? updated : i)
+      packUpdateInfo.value = null
+      toast(t('pack.updateSuccess', {v: updated.modpackVersionName || updated.versionId}))
+      loadContent()
+    }
+  } catch (e) {
+    toast((t('inst.err') || 'Ошибка: ') + e, true)
+  } finally {
+    updatingPack.value = false
+  }
+}
 
 watch(currentTab, (tab) => {
   if (tab === 'content') {
@@ -902,6 +976,7 @@ function openEditSettings() {
   if (!selectedInst.value) return
   const ins = selectedInst.value
   editName.value = ins.name
+  editGroup.value = ins.group || ''
   editServer.value = ins.serverAddress || ''
   editVersion.value = ins.versionId || ''
   editLoader.value = ins.loader || 'vanilla'
@@ -927,6 +1002,21 @@ async function browseInstanceJava() {
   } catch (e) { /* preview mode */ }
 }
 
+async function verifyInstanceFiles() {
+  if (!selectedInst.value || verifyingFiles.value) return
+  verifyingFiles.value = true
+  try {
+    const res = await VerifyInstanceFiles(selectedInst.value.id)
+    if (res) {
+      toast(t('inst.verifiedSuccess'))
+    }
+  } catch (e) {
+    toast(t('inst.verifyFailed') + e, true)
+  } finally {
+    verifyingFiles.value = false
+  }
+}
+
 async function saveInstanceSettings() {
   if (!selectedInst.value || savingSettings.value) return
   savingSettings.value = true
@@ -938,10 +1028,12 @@ async function saveInstanceSettings() {
       editServer.value,
       editVersion.value,
       editLoader.value,
-      lv
+      lv,
+      editGroup.value
     )
     if (updated) {
       selectedInst.value.name = updated.name
+      selectedInst.value.group = updated.group
       selectedInst.value.serverAddress = updated.serverAddress
       selectedInst.value.versionId = updated.versionId
       selectedInst.value.loader = updated.loader
@@ -1171,6 +1263,11 @@ async function saveInstanceSettings() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-mini-icon"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                   {{ t('loader.' + selectedInst.loader) }} {{ selectedInst.versionId }}
                 </span>
+                <span v-if="selectedInst.modpackSource" class="mr-meta-pill modpack-source" :class="selectedInst.modpackSource">
+                  <img v-if="getSourceIcon(selectedInst.modpackSource)" :src="getSourceIcon(selectedInst.modpackSource)" class="source-brand-img-pill" :alt="selectedInst.modpackSource" />
+                  <span style="text-transform: capitalize;">{{ selectedInst.modpackSource }}</span>
+                  <span v-if="selectedInst.modpackVersionName">v{{ selectedInst.modpackVersionName }}</span>
+                </span>
                 <span v-if="selectedInst.playTime" class="mr-meta-pill" :title="'Общее время в игре: ' + formatPlaytime(selectedInst.playTime)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-mini-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                   {{ formatPlaytime(selectedInst.playTime) }}
@@ -1213,6 +1310,16 @@ async function saveInstanceSettings() {
               </span>
             </button>
 
+            <button
+              v-if="selectedInst.modpackSource"
+              class="mr-btn-icon"
+              :class="{spinning: checkingPackUpdate}"
+              :title="t('pack.checkUpdate')"
+              @click="checkModpackUpdate(true)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            </button>
+
             <button class="mr-btn-icon" :title="t('inst.editSettings')" @click="openEditSettings">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
@@ -1223,6 +1330,34 @@ async function saveInstanceSettings() {
 
             <button class="mr-btn-icon" :title="t('inst.deleteTitle')" @click="promptDeleteInst(selectedInst)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Upstream Modpack Update Banner -->
+        <div v-if="packUpdateInfo && packUpdateInfo.hasUpdate" class="modpack-update-banner">
+          <div class="modpack-update-left">
+            <div class="modpack-update-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>
+            </div>
+            <div class="modpack-update-text">
+              <div class="modpack-update-title">
+                {{ t('pack.updateAvailable', {v: packUpdateInfo.latestVersion}) }}
+              </div>
+              <div class="modpack-update-sub">
+                <span v-if="selectedInst.modpackVersionName">{{ t('pack.currentVer', {v: selectedInst.modpackVersionName}) }} • </span>
+                <span>{{ t('pack.preserveNote') }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="modpack-update-actions">
+            <button v-if="packUpdateInfo.changelog" class="mr-btn-secondary btn-sm" @click="showChangelogModal = true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <span>{{ t('pack.changelog') }}</span>
+            </button>
+            <button class="mr-btn-primary btn-pack-update" :disabled="updatingPack" @click="onUpdateModpack">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>
+              <span>{{ updatingPack ? t('pack.updating') : t('pack.updateBtn') }}</span>
             </button>
           </div>
         </div>
@@ -1942,6 +2077,14 @@ async function saveInstanceSettings() {
           </div>
 
           <div class="fld-group">
+            <label class="fld-label">{{ t('inst.group') }}</label>
+            <input class="txt-in" v-model="editGroup" :placeholder="t('inst.groupPh')" list="inst-groups-list">
+            <datalist id="inst-groups-list">
+              <option v-for="g in availableGroups" :key="g" :value="g">{{ g }}</option>
+            </datalist>
+          </div>
+
+          <div class="fld-group">
             <label class="fld-label">{{ t('inst.serverAddress') }}</label>
             <input class="txt-in" v-model="editServer" :placeholder="t('inst.serverAddressPh')">
           </div>
@@ -2036,6 +2179,16 @@ async function saveInstanceSettings() {
             </div>
           </button>
 
+          <button class="inst-action-row" :disabled="verifyingFiles" @click="verifyInstanceFiles">
+            <div class="inst-action-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+            </div>
+            <div class="inst-action-text">
+              <span class="inst-action-name">{{ verifyingFiles ? t('inst.verifying') : t('inst.verifyFiles') }}</span>
+              <span class="inst-action-desc">Проверка SHA1 библиотек, ассетов и клиента с починкой повреждений</span>
+            </div>
+          </button>
+
           <button class="inst-action-row" @click="openInstanceFolder">
             <div class="inst-action-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
@@ -2122,6 +2275,54 @@ async function saveInstanceSettings() {
             @click="executeModInstall(depTargetHit, depSelectedUrls)"
           >
             {{ t('deps.installAll') || 'Установить всё' }} ({{ depSelectedUrls.length + 1 }})
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modpack Update Changelog Modal -->
+    <div v-if="showChangelogModal && packUpdateInfo" class="modal-root">
+      <div class="modal-backdrop" @click="showChangelogModal = false"></div>
+      <div class="modal-box changelog-modal-box">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div class="modal-icon changelog-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="modal-title">{{ t('pack.changelog') }}: v{{ packUpdateInfo.latestVersion }}</h2>
+              <div class="modal-subtitle">
+                {{ selectedInst.name }} • {{ selectedInst.modpackSource }}
+              </div>
+            </div>
+          </div>
+          <button class="modal-close" @click="showChangelogModal = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="modal-body changelog-modal-body">
+          <div class="changelog-content-card">
+            <pre class="changelog-text-block">{{ packUpdateInfo.changelog || 'Автор сборки не оставил подробного описания изменений для этой версии.' }}</pre>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <button class="btn-sec" @click="showChangelogModal = false">
+            {{ t('dlg.cancel') || 'Закрыть' }}
+          </button>
+          <button
+            class="btn-primary btn-pack-update"
+            :disabled="updatingPack"
+            @click="onUpdateModpack"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>
+            <span>{{ updatingPack ? t('pack.updating') : t('pack.updateBtn') }}</span>
           </button>
         </div>
       </div>

@@ -649,6 +649,76 @@ export namespace main {
 	        this.content = source["content"];
 	    }
 	}
+	export class DetectedInstance {
+	    id: string;
+	    name: string;
+	    versionId: string;
+	    loader: string;
+	    loaderVersion?: string;
+	    path: string;
+	    icon?: string;
+	    modpackSource?: string;
+	    modpackId?: string;
+	    modpackVersionId?: string;
+	    modpackVersionName?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DetectedInstance(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.versionId = source["versionId"];
+	        this.loader = source["loader"];
+	        this.loaderVersion = source["loaderVersion"];
+	        this.path = source["path"];
+	        this.icon = source["icon"];
+	        this.modpackSource = source["modpackSource"];
+	        this.modpackId = source["modpackId"];
+	        this.modpackVersionId = source["modpackVersionId"];
+	        this.modpackVersionName = source["modpackVersionName"];
+	    }
+	}
+	export class DetectedLauncher {
+	    id: string;
+	    name: string;
+	    basePath: string;
+	    found: boolean;
+	    instances: DetectedInstance[];
+	
+	    static createFrom(source: any = {}) {
+	        return new DetectedLauncher(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.basePath = source["basePath"];
+	        this.found = source["found"];
+	        this.instances = this.convertValues(source["instances"], DetectedInstance);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class FilePickResult {
 	    filePath: string;
 	    dataUrl: string;
@@ -674,11 +744,17 @@ export namespace main {
 	    dir: string;
 	    created: number;
 	    icon?: string;
+	    group?: string;
+	    sortOrder?: number;
 	    playTime?: number;
 	    playTimeToday?: number;
 	    lastPlayDay?: string;
 	    lastPlayed?: number;
 	    serverAddress?: string;
+	    modpackSource?: string;
+	    modpackId?: string;
+	    modpackVersionId?: string;
+	    modpackVersionName?: string;
 	    ramMb?: number;
 	    javaPath?: string;
 	    jvmPreset?: string;
@@ -702,11 +778,17 @@ export namespace main {
 	        this.dir = source["dir"];
 	        this.created = source["created"];
 	        this.icon = source["icon"];
+	        this.group = source["group"];
+	        this.sortOrder = source["sortOrder"];
 	        this.playTime = source["playTime"];
 	        this.playTimeToday = source["playTimeToday"];
 	        this.lastPlayDay = source["lastPlayDay"];
 	        this.lastPlayed = source["lastPlayed"];
 	        this.serverAddress = source["serverAddress"];
+	        this.modpackSource = source["modpackSource"];
+	        this.modpackId = source["modpackId"];
+	        this.modpackVersionId = source["modpackVersionId"];
+	        this.modpackVersionName = source["modpackVersionName"];
 	        this.ramMb = source["ramMb"];
 	        this.javaPath = source["javaPath"];
 	        this.jvmPreset = source["jvmPreset"];
@@ -733,6 +815,30 @@ export namespace main {
 	        this.found = source["found"];
 	        this.path = source["path"];
 	        this.managed = source["managed"];
+	    }
+	}
+	export class ModpackUpdateInfo {
+	    hasUpdate: boolean;
+	    currentVersion: string;
+	    latestVersion: string;
+	    latestVersionId: string;
+	    downloadUrl: string;
+	    changelog: string;
+	    releaseDate: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ModpackUpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hasUpdate = source["hasUpdate"];
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.latestVersionId = source["latestVersionId"];
+	        this.downloadUrl = source["downloadUrl"];
+	        this.changelog = source["changelog"];
+	        this.releaseDate = source["releaseDate"];
 	    }
 	}
 	export class ScreenshotItem {
@@ -770,6 +876,7 @@ export namespace main {
 	    selectedVersion: string;
 	    activeInstance: string;
 	    language: string;
+	    groups?: string[];
 	    centerWindow: boolean;
 	    windowCustom: boolean;
 	    fullscreen: boolean;
@@ -798,6 +905,7 @@ export namespace main {
 	        this.selectedVersion = source["selectedVersion"];
 	        this.activeInstance = source["activeInstance"];
 	        this.language = source["language"];
+	        this.groups = source["groups"];
 	        this.centerWindow = source["centerWindow"];
 	        this.windowCustom = source["windowCustom"];
 	        this.fullscreen = source["fullscreen"];
@@ -893,6 +1001,24 @@ export namespace main {
 	        this.releaseNotes = source["releaseNotes"];
 	        this.publishedAt = source["publishedAt"];
 	        this.error = source["error"];
+	    }
+	}
+	export class VerifyResult {
+	    totalChecked: number;
+	    repaired: number;
+	    failed: number;
+	    details: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new VerifyResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalChecked = source["totalChecked"];
+	        this.repaired = source["repaired"];
+	        this.failed = source["failed"];
+	        this.details = source["details"];
 	    }
 	}
 

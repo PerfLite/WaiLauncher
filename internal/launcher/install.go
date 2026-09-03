@@ -40,6 +40,49 @@ func (l *Launcher) EnsureInstalled(ctx context.Context, v *VersionJSON, emit fun
 	return l.extractAllNatives(v)
 }
 
+// LoadVersion loads the VersionJSON for a vanilla or local modloader version ID.
+func (l *Launcher) LoadVersion(ctx context.Context, versionID string) (*VersionJSON, error) {
+	m, err := l.GetManifest(ctx, false)
+	if err == nil {
+		if ref := l.FindVersion(m, versionID); ref != nil {
+			v, err := l.GetVersionJSON(ctx, *ref)
+			if err == nil {
+				return v, nil
+			}
+		}
+	}
+	// Fallback to local version
+	if lv, lerr := l.loadLocalVersion(versionID); lerr == nil {
+		return lv, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf(l.T("err.manifest"), err)
+	}
+	return nil, fmt.Errorf(l.T("err.not_found"), versionID)
+}
+
+// VerifyAndRepair forcibly checks SHA1 and size of client jar, libraries, and assets for version v,
+// downloading any missing or corrupted files, and re-extracts natives.
+func (l *Launcher) VerifyAndRepair(ctx context.Context, v *VersionJSON, emit func(ProgressEvent)) (int, int, error) {
+	// Remove install marker to force full verification
+	_ = os.Remove(l.installMarkerPath(v.ID))
+
+	if err := l.installClient(ctx, v, emit); err != nil {
+		return 0, 0, err
+	}
+	if err := l.installLibraries(ctx, v, emit); err != nil {
+		return 0, 0, err
+	}
+	if err := l.installAssets(ctx, v, emit); err != nil {
+		return 0, 0, err
+	}
+	l.writeInstallMarker(v)
+	if err := l.extractAllNatives(v); err != nil {
+		return 0, 0, err
+	}
+	return len(v.Libraries), 0, nil
+}
+
 // installMarkerValid reports whether version v was fully installed with the
 // same asset index before.
 func (l *Launcher) installMarkerValid(v *VersionJSON) bool {

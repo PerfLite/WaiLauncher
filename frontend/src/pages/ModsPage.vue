@@ -6,10 +6,11 @@ import {
   SearchModpacks,
   GetModpackDetails,
   InstallModpack,
-  SearchModrinthMods,
-  InstallModrinthMod,
 } from '../../wailsjs/go/main/App'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
+import modrinthIcon from '../assets/modrinth-icon.png'
+import curseforgeIcon from '../assets/curseforge-icon.png'
+import ftbIcon from '../assets/ftb-icon.png'
 
 const source = ref('modrinth') // 'modrinth' | 'curseforge'
 const query = ref('')
@@ -147,10 +148,14 @@ async function doInstall() {
 
   try {
     const name = customInstanceName.value.trim() || selectedPack.value.title
+    const vName = chosenVersion.value.version_number || chosenVersion.value.name || chosenVersion.value.id
     const created = await InstallModpack(
       selectedPack.value.source,
       chosenVersion.value.download_url,
-      name
+      name,
+      String(selectedPack.value.id),
+      String(chosenVersion.value.id),
+      String(vName)
     )
     if (created) {
       store.instances = [...store.instances.filter(i => i.id !== created.id), created]
@@ -170,50 +175,6 @@ function formatNumber(num) {
   return String(num)
 }
 
-/* Popular shaders & resource packs for the active instance */
-const activeInst = computed(() =>
-  store.instances.find(i => i.id === store.settings.activeInstance) || store.instances[0] || null
-)
-const popularContent = ref([]) // {slides: 'shader'|'resourcepack', items: [...] }
-const loadingPopular = ref(false)
-const installingPopMap = ref({})
-
-async function loadPopular() {
-  if (!activeInst.value) {
-    popularContent.value = []
-    return
-  }
-  loadingPopular.value = true
-  try {
-    const [sh, rp] = await Promise.all([
-      SearchModrinthMods('', 'shader', '', '', 0, 8).catch(() => null),
-      SearchModrinthMods('', 'resourcepack', '', '', 0, 8).catch(() => null)
-    ])
-    popularContent.value = [
-      {kind: 'shader', title: t('cat.shaders'), items: (sh && sh.hits) || []},
-      {kind: 'resourcepack', title: t('cat.resourcepacks'), items: (rp && rp.hits) || []},
-    ].filter(g => g.items.length > 0)
-  } catch (e) {
-    popularContent.value = []
-  } finally {
-    loadingPopular.value = false
-  }
-}
-
-async function installPopular(item, kind) {
-  if (!activeInst.value || installingPopMap.value[item.project_id]) return
-  installingPopMap.value[item.project_id] = true
-  try {
-    await InstallModrinthMod(activeInst.value.id, item.project_id, kind)
-    toast((t('mr.installed') || 'Установлено: ') + item.title)
-  } catch (e) {
-    toast((t('inst.err') || 'Ошибка: ') + e, true)
-  } finally {
-    installingPopMap.value[item.project_id] = false
-  }
-}
-
-watch(activeInst, () => loadPopular())
 </script>
 
 <template>
@@ -231,7 +192,7 @@ watch(activeInst, () => loadPopular())
           :class="{active: source === 'modrinth'}"
           @click="source = 'modrinth'"
         >
-          <span class="source-icon modrinth"></span>
+          <img :src="modrinthIcon" class="source-brand-img modrinth" alt="Modrinth" />
           <span>Modrinth</span>
         </button>
         <button
@@ -239,8 +200,16 @@ watch(activeInst, () => loadPopular())
           :class="{active: source === 'curseforge'}"
           @click="source = 'curseforge'"
         >
-          <span class="source-icon curseforge"></span>
+          <img :src="curseforgeIcon" class="source-brand-img curseforge" alt="CurseForge" />
           <span>CurseForge</span>
+        </button>
+        <button
+          class="source-tab"
+          :class="{active: source === 'ftb'}"
+          @click="source = 'ftb'"
+        >
+          <img :src="ftbIcon" class="source-brand-img ftb" alt="FTB" />
+          <span>FTB</span>
         </button>
       </div>
     </div>
@@ -266,36 +235,6 @@ watch(activeInst, () => loadPopular())
         <select class="filter-select" v-model="selectedLoader">
           <option v-for="ld in loaders" :key="ld.id" :value="ld.id">{{ ld.label }}</option>
         </select>
-      </div>
-    </div>
-
-    <!-- Popular shaders / resourcepacks for the active build -->
-    <div v-if="activeInst && popularContent.length" class="popular-section">
-      <div v-for="group in popularContent" :key="group.kind" class="popular-group">
-        <div class="popular-group-title">
-          <span>{{ group.kind === 'shader' ? '✨ ' : '🖌️ ' }}{{ group.title }} — {{ t('pop.for') || 'для сборки' }} «{{ activeInst.name }}»</span>
-        </div>
-        <div class="popular-scroll">
-          <div v-for="item in group.items" :key="item.project_id" class="pop-card">
-            <img v-if="item.icon_url" :src="item.icon_url" class="pop-icon" alt="" loading="lazy">
-            <div v-else class="pop-icon pop-icon-fallback">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
-            </div>
-            <div class="pop-info">
-              <div class="pop-name" :title="item.title">{{ item.title }}</div>
-              <div class="pop-dl">↓ {{ formatNumber(item.downloads) }}</div>
-            </div>
-            <button
-              class="pop-install-btn"
-              :disabled="installingPopMap[item.project_id]"
-              :title="t('pack.installBtn') || 'Установить'"
-              @click="installPopular(item, group.kind)"
-            >
-              <svg v-if="!installingPopMap[item.project_id]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>
-              <span v-else>…</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
 

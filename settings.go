@@ -24,8 +24,9 @@ type Settings struct {
 	LauncherUpdates bool   `json:"launcherUpdates"` // self-update: check GitHub Releases on start
 	AutoCleanCache  bool   `json:"autoCleanCache"`  // auto-delete cache older than 30 days on startup
 	SelectedVersion string `json:"selectedVersion"`
-	ActiveInstance  string `json:"activeInstance"` // id of the build ИГРАТЬ launches
-	Language        string `json:"language"`       // "ru" (default) or "en"
+	ActiveInstance  string   `json:"activeInstance"` // id of the build ИГРАТЬ launches
+	Language        string   `json:"language"`       // "ru" (default) or "en"
+	Groups          []string `json:"groups,omitempty"` // custom folders / categories list
 
 	CenterWindow  bool   `json:"centerWindow"`
 
@@ -62,9 +63,16 @@ func defaultSettings(root string) *Settings {
 
 func loadSettings(root string) *Settings {
 	s := defaultSettings(root)
-	data, err := os.ReadFile(filepath.Join(root, "settings.json"))
-	if err == nil {
-		json.Unmarshal(data, s)
+	path := filepath.Join(root, "settings.json")
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 || json.Unmarshal(data, s) != nil {
+		// Attempt fallback recovery from .bak
+		bakPath := path + ".bak"
+		if bakData, bakErr := os.ReadFile(bakPath); bakErr == nil && len(bakData) > 0 {
+			if json.Unmarshal(bakData, s) == nil {
+				_ = atomicSaveJSON(path, bakData)
+			}
+		}
 	}
 	s.root = root
 	return s
@@ -75,7 +83,7 @@ func (s *Settings) save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.root, "settings.json"), data, 0o644)
+	return atomicSaveJSON(filepath.Join(s.root, "settings.json"), data)
 }
 
 // normalize clamps invalid values before saving/launching.
