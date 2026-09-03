@@ -3,9 +3,11 @@ import {computed} from 'vue'
 import {store, toast} from '../store'
 import {t} from '../i18n'
 import {DownloadLauncherUpdate, OpenURL} from '../../wailsjs/go/main/App'
+import {renderMarkdown, handleMarkdownClick} from '../utils/markdown'
 
 const up = computed(() => store.launcherUpdate)
 const info = computed(() => up.value.info)
+const renderedNotes = computed(() => renderMarkdown(info.value?.releaseNotes || ''))
 
 function close() {
   if (up.value.downloading || up.value.restarting) return
@@ -64,9 +66,12 @@ function formatDate(s) {
           </div>
         </div>
 
-        <div class="update-notes" v-if="info.releaseNotes">
-          <pre>{{ info.releaseNotes }}</pre>
-        </div>
+        <div
+          class="update-notes md-body"
+          v-if="info.releaseNotes"
+          v-html="renderedNotes"
+          @click="handleMarkdownClick"
+        ></div>
 
         <div v-if="up.downloading || up.restarting" class="update-progress">
           <div class="java-progress-bar">

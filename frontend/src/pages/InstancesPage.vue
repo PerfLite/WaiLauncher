@@ -19,6 +19,7 @@ import {
   CheckInstanceModpackUpdate, UpdateInstanceModpack
 } from '../../wailsjs/go/main/App'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
+import {renderMarkdown, handleMarkdownClick} from '../utils/markdown'
 import modrinthIcon from '../assets/modrinth-icon.png'
 import curseforgeIcon from '../assets/curseforge-icon.png'
 import ftbIcon from '../assets/ftb-icon.png'
@@ -2319,9 +2320,11 @@ async function saveInstanceSettings() {
         </div>
 
         <div class="modal-body changelog-modal-body">
-          <div class="changelog-content-card">
-            <pre class="changelog-text-block">{{ packUpdateInfo.changelog || 'Автор сборки не оставил подробного описания изменений для этой версии.' }}</pre>
-          </div>
+          <div
+            class="changelog-content-card md-body"
+            v-html="renderMarkdown(packUpdateInfo.changelog || 'Автор сборки не оставил подробного описания изменений для этой версии.')"
+            @click="handleMarkdownClick"
+          ></div>
         </div>
 
         <div class="modal-foot">

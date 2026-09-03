@@ -1333,6 +1333,126 @@ select.sel option{background:var(--panel-2);color:var(--txt)}
   margin:0;font-family:var(--font-body);font-size:12px;color:var(--muted);
   line-height:1.6;white-space:pre-wrap;word-break:break-word;
 }
+
+/* Markdown Rendered Content */
+.md-body {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.65;
+  color: #e2e8f0;
+  word-break: break-word;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  color: #fff;
+  font-weight: 700;
+  margin-top: 14px;
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+.md-body h1:first-child,
+.md-body h2:first-child,
+.md-body h3:first-child,
+.md-body h4:first-child {
+  margin-top: 0;
+}
+.md-body h1 {
+  font-size: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 6px;
+  color: #55d24a;
+}
+.md-body h2 {
+  font-size: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 4px;
+  color: #38bdf8;
+}
+.md-body h3 {
+  font-size: 14.5px;
+  color: #f59e0b;
+}
+.md-body h4 {
+  font-size: 13.5px;
+  color: #e2e8f0;
+}
+.md-body p {
+  margin: 0 0 10px 0;
+}
+.md-body p:last-child {
+  margin-bottom: 0;
+}
+.md-body ul,
+.md-body ol {
+  margin: 0 0 10px 0;
+  padding-left: 20px;
+}
+.md-body li {
+  margin-bottom: 4px;
+}
+.md-body li > p {
+  margin: 0;
+}
+.md-body strong,
+.md-body b {
+  color: #fff;
+  font-weight: 700;
+}
+.md-body em,
+.md-body i {
+  color: #cbd5e1;
+}
+.md-body code {
+  font-family: var(--font-mono, monospace);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+  color: #ffb400;
+}
+.md-body pre {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.md-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #94a3b8;
+}
+.md-body blockquote {
+  margin: 10px 0;
+  padding: 6px 12px;
+  border-left: 3px solid #55d24a;
+  background: rgba(85, 210, 74, 0.07);
+  border-radius: 0 6px 6px 0;
+  color: #94a3b8;
+}
+.md-body hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 14px 0;
+}
+.md-body a,
+.md-link {
+  color: #38bdf8;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.md-body a:hover,
+.md-link:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
 .update-progress{display:flex;flex-direction:column;gap:8px}
 .update-progress .java-progress-bar{height:8px}
 .update-error{color:#ff7a7a;font-size:12px;margin:0}
