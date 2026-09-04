@@ -8,6 +8,7 @@ import Toasts from './components/Toasts.vue'
 import LaunchOverlay from './components/LaunchOverlay.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import CreateInstanceModal from './components/CreateInstanceModal.vue'
+import AboutModal from './components/AboutModal.vue'
 import HomePage from './pages/HomePage.vue'
 import InstancesPage from './pages/InstancesPage.vue'
 import NewsPage from './pages/NewsPage.vue'
@@ -167,5 +168,6 @@ watch(() => store.page, () => {
   <CreateInstanceModal/>
   <LaunchOverlay/>
   <UpdateModal/>
+  <AboutModal/>
   <Toasts/>
 </template>

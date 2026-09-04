@@ -287,7 +287,8 @@ const dicts = {
     'settings.noBackend': 'Недоступно без бэкенда',
     'about.title': 'О программе WaiLauncher',
     'about.desc': 'Современный лаунчер Minecraft нового поколения',
-    'about.developer': 'Разработчик',
+    'about.developer': 'Разработчик и проект',
+    'about.issues': 'Сообщить о баге / GitHub Issues',
     'about.builtWith': 'Технологии',
     'about.close': 'Закрыть',
 
@@ -724,7 +725,8 @@ const dicts = {
     'settings.noBackend': 'Unavailable without backend',
     'about.title': 'About WaiLauncher',
     'about.desc': 'Next-generation modern Minecraft launcher',
-    'about.developer': 'Developer',
+    'about.developer': 'Developer & Project',
+    'about.issues': 'Report an Issue / GitHub Issues',
     'about.builtWith': 'Built with',
     'about.close': 'Close',
 

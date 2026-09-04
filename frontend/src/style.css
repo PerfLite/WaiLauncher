@@ -69,6 +69,28 @@ body{
 .logo svg{width:22px;height:22px;filter:drop-shadow(0 0 6px var(--green-glow))}
 .logo-text{font-family:var(--font-pixel);font-size:11px;letter-spacing:1px;color:var(--txt);line-height:1}
 .logo-text b{color:var(--green)}
+.titlebar-about-btn{
+  margin-left:14px;
+  width:26px;height:26px;border-radius:7px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.03);
+  color:var(--muted);
+  cursor:pointer;
+  display:grid;place-items:center;
+  transition:all .18s ease;
+  --wails-draggable:no-drag;
+}
+.titlebar-about-btn svg{
+  width:14px;height:14px;
+  transition:transform .18s ease, color .18s ease;
+}
+.titlebar-about-btn:hover{
+  background:rgba(85,210,74,.12);
+  border-color:rgba(85,210,74,.35);
+  color:var(--green);
+  transform:scale(1.06);
+  box-shadow:0 0 10px rgba(85,210,74,.2);
+}
 .titlebar-hint{
   margin-left:auto;margin-right:auto;
   font-size:12px;color:var(--muted);letter-spacing:.4px;
@@ -2637,6 +2659,32 @@ select.sel option{background:var(--panel-2);color:var(--txt)}
   color: var(--muted);
   font-size: 14px;
 }
+.about-link-issues {
+  border-color: rgba(255, 180, 0, 0.25);
+  background: rgba(255, 180, 0, 0.04);
+}
+.about-link-issues:hover {
+  background: rgba(255, 180, 0, 0.12);
+  border-color: rgba(255, 180, 0, 0.45);
+  box-shadow: 0 0 12px rgba(255, 180, 0, 0.15);
+}
+.about-link-icon.issue-icon {
+  color: #ffb400;
+  stroke: #ffb400;
+}
+.about-highlight-issue {
+  color: #ffb400;
+}
+.about-link-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+}
+.about-link-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
 .about-tags-row {
   display: flex;
   flex-wrap: wrap;
@@ -2656,6 +2704,8 @@ select.sel option{background:var(--panel-2);color:var(--txt)}
 .about-tag.tag-vite { color: #bd34fe; border-color: rgba(189,52,254,0.3); background: rgba(189,52,254,0.08); }
 .about-tag.tag-webview { color: #0078d4; border-color: rgba(0,120,212,0.3); background: rgba(0,120,212,0.08); }
 .about-tag.tag-modrinth { color: #1bd96a; border-color: rgba(27,217,106,0.3); background: rgba(27,217,106,0.08); }
+.about-tag.tag-curseforge { color: #f16436; border-color: rgba(241,100,54,0.3); background: rgba(241,100,54,0.08); }
+.about-tag.tag-ftb { color: #ff9900; border-color: rgba(255,153,0,0.3); background: rgba(255,153,0,0.08); }
 
 /* ===== Dependency Resolver Modal ===== */
 .dep-modal-box {
