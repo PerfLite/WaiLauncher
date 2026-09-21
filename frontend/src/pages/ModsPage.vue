@@ -42,7 +42,6 @@ const loaders = [
   {id: 'fabric', label: 'Fabric'},
   {id: 'neoforge', label: 'NeoForge'},
   {id: 'forge', label: 'Forge'},
-  {id: 'quilt', label: 'Quilt'},
 ]
 
 /* Detail Page View */
