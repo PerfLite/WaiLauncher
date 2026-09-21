@@ -93,6 +93,8 @@ type ModrinthVersion struct {
 	Files         []ModrinthVersionFile `json:"files"`
 	Dependencies  []ModrinthDependency  `json:"dependencies"`
 	DatePublished string                `json:"date_published"`
+	VersionType   string                `json:"version_type"`
+	Changelog     string                `json:"changelog"`
 }
 
 // ModItem represents an installed mod in an instance's mods/ directory.

@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"WaiLauncher/internal/launcher"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // GitHub repository that hosts WaiLauncher releases.
@@ -230,18 +228,18 @@ func (a *App) DownloadLauncherUpdate() error {
 
 		rel, err := fetchLatestRelease(ctx)
 		if err != nil {
-			runtime.EventsEmit(a.ctx, "update-error", err.Error())
+			a.emit("update-error", err.Error())
 			return
 		}
 
 		downloadURL := pickUpdateAsset(rel)
 		if downloadURL == "" {
-			runtime.EventsEmit(a.ctx, "update-error", "no matching asset in release")
+			a.emit("update-error", "no matching asset in release")
 			return
 		}
 
 		progress := func(pct float64, msg string) {
-			runtime.EventsEmit(a.ctx, "update-progress", map[string]any{
+			a.emit("update-progress", map[string]any{
 				"percent": pct,
 				"message": msg,
 			})
@@ -254,23 +252,23 @@ func (a *App) DownloadLauncherUpdate() error {
 		}
 		tmpPath, err = downloadToFile(ctx, downloadURL, tmpPath, progress)
 		if err != nil {
-			runtime.EventsEmit(a.ctx, "update-error", err.Error())
+			a.emit("update-error", err.Error())
 			return
 		}
 		defer os.Remove(tmpPath)
 
 		exePath, err := os.Executable()
 		if err != nil {
-			runtime.EventsEmit(a.ctx, "update-error", "executable path: "+err.Error())
+			a.emit("update-error", "executable path: "+err.Error())
 			return
 		}
 
 		if err := replaceExecutable(tmpPath, exePath); err != nil {
-			runtime.EventsEmit(a.ctx, "update-error", err.Error())
+			a.emit("update-error", err.Error())
 			return
 		}
 
-		runtime.EventsEmit(a.ctx, "update-done", map[string]any{"path": exePath})
+		a.emit("update-done", map[string]any{"path": exePath})
 		launcher.LogInfo("Launcher updated to %s, restarting", strings.TrimPrefix(rel.TagName, "v"))
 
 		go func() {
@@ -281,7 +279,7 @@ func (a *App) DownloadLauncherUpdate() error {
 				launcher.LogError("Restart after update failed: %v", err)
 				return
 			}
-			runtime.Quit(a.ctx)
+			a.WindowClose()
 		}()
 	}()
 	return nil

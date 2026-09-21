@@ -61,6 +61,7 @@ type CurseForgeFile struct {
 	ReleaseType  int      `json:"releaseType"`
 	FileLength   int64    `json:"fileLength"`
 	DownloadURL  string   `json:"downloadUrl"`
+	FileDate     string   `json:"fileDate"`
 	GameVersions []string `json:"gameVersions"`
 	Dependencies []struct {
 		ModID        int `json:"modId"`

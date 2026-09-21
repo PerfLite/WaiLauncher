@@ -5,10 +5,7 @@ import (
 
 	"WaiLauncher/internal/launcher"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/logger"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
@@ -22,27 +19,42 @@ func main() {
 	_ = launcher.InitLogger(root)
 	launcher.LogInfo("Starting WaiLauncher version %s", launcherVersion)
 
-	app := NewApp()
+	backendApp := NewApp()
 
-	err = wails.Run(&options.App{
-		Title:     "WaiLauncher",
-		Width:     1280,
-		Height:    800,
-		MinWidth:  1024,
-		MinHeight: 640,
-		Frameless: true,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	app := application.New(application.Options{
+		Name:        "WaiLauncher",
+		Description: "Modern Minecraft Launcher",
+		Services: []application.Service{
+			application.NewService(backendApp),
 		},
-		BackgroundColour: &options.RGBA{R: 7, G: 9, B: 13, A: 255},
-		OnStartup:        app.startup,
-		Logger:           launcher.GetWailsLogger(),
-		LogLevel:         logger.INFO,
-		Bind: []interface{}{
-			app,
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		Windows: application.WindowsOptions{
+			WndClass: "WaiLauncherWebviewWindow",
 		},
 	})
 
+	backendApp.initApp(app)
+
+	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            "WaiLauncher",
+		Width:            1280,
+		Height:           800,
+		MinWidth:         1024,
+		MinHeight:        640,
+		Frameless:        true,
+		EnableFileDrop:   true,
+		BackgroundColour: application.NewRGB(7, 9, 13),
+		URL:              "/",
+		Windows: application.WindowsWindow{
+			Theme: application.Dark,
+		},
+	})
+
+	backendApp.setWindow(win)
+
+	err = app.Run()
 	if err != nil {
 		launcher.LogError("Wails runtime error: %v", err)
 	}

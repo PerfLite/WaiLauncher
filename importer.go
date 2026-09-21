@@ -3,7 +3,6 @@ package main
 import (
 	"archive/zip"
 	"bufio"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,8 +12,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type DetectedInstance struct {
@@ -125,13 +122,7 @@ func (a *App) DetectInstalledLaunchers() ([]DetectedLauncher, error) {
 
 // PickLauncherFolder opens directory picker for custom launcher path.
 func (a *App) PickLauncherFolder() (string, error) {
-	p, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Выберите папку сборок лаунчера (instances / profiles)",
-	})
-	if err != nil {
-		return "", err
-	}
-	return p, nil
+	return a.openDirectoryDialog("Выберите папку сборок лаунчера (instances / profiles)", "")
 }
 
 // ScanCustomLauncherDir scans a user-selected folder for instances.
@@ -198,7 +189,7 @@ func (a *App) ImportSelectedInstances(instPaths []string) ([]*Instance, error) {
 	total := len(instPaths)
 
 	for i, p := range instPaths {
-		inst, err := a.importSingleInstanceDirWithProgress(a.ctx, p, i+1, total)
+		inst, err := a.importSingleInstanceDirWithProgress(p, i+1, total)
 		if err != nil {
 			continue
 		}
@@ -212,11 +203,11 @@ func (a *App) ImportSelectedInstances(instPaths []string) ([]*Instance, error) {
 		a.set.ActiveInstance = last.ID
 		a.set.SelectedVersion = last.VersionID
 		_ = a.set.save()
-		runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
-		runtime.EventsEmit(a.ctx, "settings-updated", a.set)
+		a.emit("instances-updated", a.loadInstances())
+		a.emit("settings-updated", a.set)
 	}
 
-	runtime.EventsEmit(a.ctx, "import-progress", map[string]any{
+	a.emit("import-progress", map[string]any{
 		"instance": "",
 		"status":   "done",
 		"percent":  100,
@@ -227,10 +218,10 @@ func (a *App) ImportSelectedInstances(instPaths []string) ([]*Instance, error) {
 	return imported, nil
 }
 
-func (a *App) importSingleInstanceDirWithProgress(ctx context.Context, srcPath string, index, total int) (*Instance, error) {
+func (a *App) importSingleInstanceDirWithProgress(srcPath string, index, total int) (*Instance, error) {
 	meta := detectInstanceMeta(srcPath)
 
-	runtime.EventsEmit(ctx, "import-progress", map[string]any{
+	a.emit("import-progress", map[string]any{
 		"instance": meta.Name,
 		"status":   fmt.Sprintf("Подготовка сборки «%s»...", meta.Name),
 		"percent":  10,
@@ -268,7 +259,7 @@ func (a *App) importSingleInstanceDirWithProgress(ctx context.Context, srcPath s
 			}
 
 			pct := 10 + int(float64(eIdx+1)/float64(totalEntries)*80)
-			runtime.EventsEmit(ctx, "import-progress", map[string]any{
+			a.emit("import-progress", map[string]any{
 				"instance": meta.Name,
 				"status":   fmt.Sprintf("Копирование: %s", name),
 				"percent":  pct,
@@ -297,7 +288,7 @@ func (a *App) importSingleInstanceDirWithProgress(ctx context.Context, srcPath s
 		}
 	}
 
-	runtime.EventsEmit(ctx, "import-progress", map[string]any{
+	a.emit("import-progress", map[string]any{
 		"instance": meta.Name,
 		"status":   "Завершение импорта...",
 		"percent":  95,

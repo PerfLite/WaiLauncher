@@ -1,0 +1,39 @@
+# This file contains the configuration for WaiLauncher.
+version: '3'
+
+info:
+  companyName: "PerfLite"
+  productName: "WaiLauncher"
+  productIdentifier: "com.perflite.wailauncher"
+  description: "Modern Minecraft Launcher"
+  copyright: "(c) 2026, PerfLite"
+  comments: "WaiLauncher powered by Wails v3"
+  version: "1.1.3"
+
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - bin
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+      - "*.js"
+      - "*.ts"
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: wails3 task run
+      type: primary

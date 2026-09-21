@@ -48,6 +48,11 @@ function onNavClick(item) {
       store.page = 'instances'
       instancesExpanded.value = true
     }
+  } else if (item.id === 'mods') {
+    if (store.page === 'mods') {
+      window.dispatchEvent(new CustomEvent('mods-reset-view'))
+    }
+    store.page = 'mods'
   } else {
     store.page = item.id
   }

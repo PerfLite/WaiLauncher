@@ -15,10 +15,11 @@ import (
 	"WaiLauncher/internal/launcher"
 	"WaiLauncher/internal/launcher/auth"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-const launcherVersion = "1.1.2"
+const launcherVersion = "1.1.3"
 
 // FilePickResult holds local file path and base64 data URL from file dialog.
 type FilePickResult struct {
@@ -51,6 +52,8 @@ type StatePayload struct {
 
 // App is the Wails-bound backend service.
 type App struct {
+	app      *application.App
+	win      application.Window
 	ctx      context.Context
 	l        *launcher.Launcher
 	set      *Settings
@@ -63,21 +66,102 @@ type App struct {
 	updating   bool // launcher self-update in progress
 	gameHandle *launcher.GameHandle
 	authCancel context.CancelFunc
+	packCancel context.CancelFunc
 	discordRPC *launcher.DiscordRPC
-	trayStopItem interface {
-		Enable()
-		Disable()
-	}
+	trayStopItem *application.MenuItem
 }
 
 // NewApp creates a new App application struct.
 func NewApp() *App {
 	return &App{
+		ctx:        context.Background(),
 		discordRPC: &launcher.DiscordRPC{ClientID: ""},
 	}
 }
 
-// startup is called when the app starts.
+func (a *App) initApp(app *application.App) {
+	a.app = app
+}
+
+func (a *App) setWindow(win application.Window) {
+	a.win = win
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+		paths := e.Context().DroppedFiles()
+		for _, p := range paths {
+			lp := strings.ToLower(p)
+			if strings.HasSuffix(lp, ".mrpack") || strings.HasSuffix(lp, ".zip") {
+				a.emit("file-drop-import", p)
+				return
+			}
+		}
+	})
+	a.fitWindow()
+}
+
+// emit pushes a custom event to the frontend event bus.
+func (a *App) emit(name string, data ...any) {
+	if a.app != nil {
+		a.app.Event.Emit(name, data...)
+	} else if app := application.Get(); app != nil {
+		app.Event.Emit(name, data...)
+	}
+}
+
+func (a *App) openFileDialog(title string, filters []application.FileFilter, defaultDir string) (string, error) {
+	app := a.app
+	if app == nil {
+		app = application.Get()
+	}
+	dialog := app.Dialog.OpenFile().SetTitle(title)
+	if defaultDir != "" {
+		dialog.SetDirectory(defaultDir)
+	}
+	for _, f := range filters {
+		dialog.AddFilter(f.DisplayName, f.Pattern)
+	}
+	return dialog.PromptForSingleSelection()
+}
+
+func (a *App) openDirectoryDialog(title string, defaultDir string) (string, error) {
+	app := a.app
+	if app == nil {
+		app = application.Get()
+	}
+	dialog := app.Dialog.OpenFile().
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		SetTitle(title)
+	if defaultDir != "" {
+		dialog.SetDirectory(defaultDir)
+	}
+	return dialog.PromptForSingleSelection()
+}
+
+func (a *App) saveFileDialog(title, defaultFilename string, filters []application.FileFilter, defaultDir string) (string, error) {
+	app := a.app
+	if app == nil {
+		app = application.Get()
+	}
+	dialog := app.Dialog.SaveFile().SetMessage(title)
+	if defaultFilename != "" {
+		dialog.SetFilename(defaultFilename)
+	}
+	if defaultDir != "" {
+		dialog.SetDirectory(defaultDir)
+	}
+	for _, f := range filters {
+		dialog.AddFilter(f.DisplayName, f.Pattern)
+	}
+	return dialog.PromptForSingleSelection()
+}
+
+// ServiceStartup is called by Wails v3 when the service starts up.
+func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	a.startup(ctx)
+	return nil
+}
+
+// startup initializes the launcher state and subsystems.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	root, err := launcher.DefaultRoot()
@@ -87,7 +171,7 @@ func (a *App) startup(ctx context.Context) {
 	_ = launcher.InitLogger(root)
 	l, err := launcher.New(root)
 	if err != nil {
-		runtime.LogError(ctx, "init data dir: "+err.Error())
+		launcher.LogError("init data dir: %v", err)
 		return
 	}
 	a.l = l
@@ -99,7 +183,7 @@ func (a *App) startup(ctx context.Context) {
 
 	accMgr, err := auth.NewManager(root, a.set.Username)
 	if err != nil {
-		runtime.LogError(ctx, "init accounts: "+err.Error())
+		launcher.LogError("init accounts: %v", err)
 	}
 	a.accounts = accMgr
 
@@ -122,37 +206,39 @@ func (a *App) startup(ctx context.Context) {
 			_, _, _ = a.l.CleanOldCache(30 * 24 * time.Hour)
 		}()
 	}
-
-	runtime.OnFileDrop(a.ctx, func(x, y int, paths []string) {
-		for _, p := range paths {
-			lp := strings.ToLower(p)
-			if strings.HasSuffix(lp, ".mrpack") || strings.HasSuffix(lp, ".zip") {
-				runtime.EventsEmit(a.ctx, "file-drop-import", p)
-				return
-			}
-		}
-	})
 }
 
 // currentScreenSize returns the size of the current (or primary) display.
 func (a *App) currentScreenSize() (int, int) {
-	screens, err := runtime.ScreenGetAll(a.ctx)
-	if err != nil || len(screens) == 0 {
-		return 0, 0
-	}
-	s := screens[0]
-	for _, sc := range screens {
-		if sc.IsCurrent {
-			s = sc
-			break
+	if a.win != nil {
+		if sc, err := a.win.GetScreen(); err == nil && sc != nil {
+			if sc.WorkArea.Width > 0 && sc.WorkArea.Height > 0 {
+				return sc.WorkArea.Width, sc.WorkArea.Height
+			}
+			return sc.Size.Width, sc.Size.Height
 		}
 	}
-	return s.Size.Width, s.Size.Height
+	app := a.app
+	if app == nil {
+		app = application.Get()
+	}
+	if app != nil && app.Screen != nil {
+		if primary := app.Screen.GetPrimary(); primary != nil {
+			if primary.WorkArea.Width > 0 && primary.WorkArea.Height > 0 {
+				return primary.WorkArea.Width, primary.WorkArea.Height
+			}
+			return primary.Size.Width, primary.Size.Height
+		}
+	}
+	return 0, 0
 }
 
 // fitWindow shrinks the default 1280x800 window to fit small displays
 // (e.g. 1366x768 laptops with the taskbar visible).
 func (a *App) fitWindow() {
+	if a.win == nil {
+		return
+	}
 	sw, sh := a.currentScreenSize()
 	if sw == 0 || sh == 0 {
 		return
@@ -165,16 +251,16 @@ func (a *App) fitWindow() {
 		h = max(mh, 640)
 	}
 	if w != 1280 || h != 800 {
-		runtime.WindowSetSize(a.ctx, w, h)
+		a.win.SetSize(w, h)
 	}
 	// The 800px-tall initial window can sit partially above a 768p screen;
 	// re-center so the title bar stays visible.
-	runtime.WindowCenter(a.ctx)
+	a.win.Center()
 }
 
 // emitState pushes the launch FSM state to the frontend.
 func (a *App) emitState(state, stage string, pct float64, msg string) {
-	runtime.EventsEmit(a.ctx, "launch", map[string]any{
+	a.emit("launch", map[string]any{
 		"state": state, "stage": stage, "percent": pct, "message": msg,
 	})
 }
@@ -471,7 +557,7 @@ func (a *App) Play(instanceID string) error {
 
 		onLog := func(line string) {
 			launcher.LogToFile("GAME", line)
-			runtime.EventsEmit(a.ctx, "gamelog", line)
+			a.emit("gamelog", line)
 		}
 		var handle *launcher.GameHandle
 		if inst.Loader != "" && inst.Loader != "vanilla" {
@@ -501,8 +587,8 @@ func (a *App) Play(instanceID string) error {
 		a.mu.Unlock()
 		a.updateTrayPlaying(true)
 		a.emitState("playing", "", 100, versionID)
-		if a.set.CloseOnLaunch {
-			runtime.WindowMinimise(a.ctx)
+		if a.set.CloseOnLaunch && a.win != nil {
+			a.win.Minimise()
 		}
 		if a.set.DiscordRPC {
 			a.discordRPC.SetActivity(inst.Name, versionID)
@@ -529,16 +615,17 @@ func (a *App) Play(instanceID string) error {
 			}
 		}
 		_ = a.saveInstances(allInst)
-		runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+		a.emit("instances-updated", a.loadInstances())
 
 		a.mu.Lock()
 		a.playing = false
 		a.gameHandle = nil
 		a.mu.Unlock()
 		a.updateTrayPlaying(false)
-		if a.set.CloseOnLaunch {
-			runtime.WindowUnminimise(a.ctx)
-			runtime.WindowShow(a.ctx)
+		if a.set.CloseOnLaunch && a.win != nil {
+			a.win.UnMinimise()
+			a.win.Show()
+			a.win.Focus()
 		}
 		if err != nil {
 			// Surface a meaningful cause (OOM, mod conflict, ...) from the log
@@ -636,6 +723,15 @@ func (a *App) StopGame() {
 // CancelPlay aborts an in-progress download/install or stops a running game.
 func (a *App) CancelPlay() {
 	a.StopGame()
+}
+
+// CancelInstallModpack aborts an ongoing modpack installation.
+func (a *App) CancelInstallModpack() {
+	a.mu.Lock()
+	if a.packCancel != nil {
+		a.packCancel()
+	}
+	a.mu.Unlock()
 }
 
 // ---- Account Management API ----
@@ -778,12 +874,9 @@ func (a *App) RefreshAccount(id string) (*auth.Account, error) {
 
 // PickSkinFile opens a dialog to select a skin PNG file.
 func (a *App) PickSkinFile() (*FilePickResult, error) {
-	p, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Выберите файл скина (.png)",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Minecraft Skin (*.png)", Pattern: "*.png"},
-		},
-	})
+	p, err := a.openFileDialog("Выберите файл скина (.png)", []application.FileFilter{
+		{DisplayName: "Minecraft Skin (*.png)", Pattern: "*.png"},
+	}, "")
 	if err != nil || p == "" {
 		return nil, err
 	}
@@ -801,12 +894,9 @@ func (a *App) PickSkinFile() (*FilePickResult, error) {
 
 // PickCapeFile opens a dialog to select a cape PNG file.
 func (a *App) PickCapeFile() (*FilePickResult, error) {
-	p, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Выберите файл плаща (.png)",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Minecraft Cape (*.png)", Pattern: "*.png"},
-		},
-	})
+	p, err := a.openFileDialog("Выберите файл плаща (.png)", []application.FileFilter{
+		{DisplayName: "Minecraft Cape (*.png)", Pattern: "*.png"},
+	}, "")
 	if err != nil || p == "" {
 		return nil, err
 	}
@@ -992,22 +1082,35 @@ func (a *App) ClearCache() (*launcher.CacheInfo, error) {
 // ---- window controls for the custom titlebar ----
 
 func (a *App) WindowMinimize() {
-	runtime.WindowMinimise(a.ctx)
+	if a.win != nil {
+		a.win.Minimise()
+	}
 }
 
 // WindowToggleMaximize toggles maximization and returns the new state.
 func (a *App) WindowToggleMaximize() bool {
-	runtime.WindowToggleMaximise(a.ctx)
-	return runtime.WindowIsMaximised(a.ctx)
+	if a.win != nil {
+		a.win.ToggleMaximise()
+		return a.win.IsMaximised()
+	}
+	return false
 }
 
 func (a *App) WindowClose() {
-	runtime.Quit(a.ctx)
+	if a.app != nil {
+		a.app.Quit()
+	} else if app := application.Get(); app != nil {
+		app.Quit()
+	}
 }
 
 // OpenURL opens a link in the system browser.
 func (a *App) OpenURL(url string) {
-	runtime.BrowserOpenURL(a.ctx, url)
+	if a.app != nil {
+		_ = a.app.Browser.OpenURL(url)
+	} else if app := application.Get(); app != nil {
+		_ = app.Browser.OpenURL(url)
+	}
 }
 
 // PickJavaPath shows a file dialog to select the java executable.
@@ -1018,13 +1121,9 @@ func (a *App) PickJavaPath() string {
 		_ = os.MkdirAll(javaDir, 0o755)
 		defaultDir = javaDir
 	}
-	p, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		DefaultDirectory: defaultDir,
-		Title:            launcher.T(a.set.Language, "dialog.java"),
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Java (javaw.exe, java.exe)", Pattern: "*.exe;*"},
-		},
-	})
+	p, err := a.openFileDialog(launcher.T(a.set.Language, "dialog.java"), []application.FileFilter{
+		{DisplayName: "Java (javaw.exe, java.exe)", Pattern: "*.exe;*"},
+	}, defaultDir)
 	if err != nil {
 		return ""
 	}
@@ -1037,10 +1136,7 @@ func (a *App) PickDataDir() string {
 	if a.l != nil && a.l.Root != "" {
 		defaultDir = a.l.Root
 	}
-	p, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		DefaultDirectory: defaultDir,
-		Title:            launcher.T(a.set.Language, "dialog.dataDir"),
-	})
+	p, err := a.openDirectoryDialog(launcher.T(a.set.Language, "dialog.dataDir"), defaultDir)
 	if err != nil {
 		return ""
 	}
@@ -1054,7 +1150,7 @@ func (a *App) OpenDataDir() {
 		if goruntime.GOOS == "windows" {
 			exec.Command("explorer.exe", a.l.Root).Start()
 		} else {
-			runtime.BrowserOpenURL(a.ctx, a.l.Root)
+			a.OpenURL(a.l.Root)
 		}
 	}
 }
@@ -1090,7 +1186,7 @@ func (a *App) InstallJavaRuntime(major int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	emit := func(ev launcher.ProgressEvent) {
-		runtime.EventsEmit(a.ctx, "java-install-progress", map[string]any{
+		a.emit("java-install-progress", map[string]any{
 			"major":   major,
 			"percent": ev.Percent,
 			"message": ev.Message,

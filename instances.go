@@ -20,7 +20,7 @@ import (
 	"unicode"
 
 	"WaiLauncher/internal/launcher"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // Instance is one user-created build ("сборка"): a version + modloader combo
@@ -157,7 +157,7 @@ func (a *App) enrichInstanceIconsBackground(instances []Instance) {
 		}
 		if updated {
 			_ = a.saveInstances(list)
-			runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+			a.emit("instances-updated", a.loadInstances())
 		}
 	}(instances)
 }
@@ -592,6 +592,7 @@ func (a *App) InstallModrinthMod(instanceID, projectIDOrSlug, projectType string
 	if err := a.l.DownloadModFile(ctx, chosenFile.URL, destPath); err != nil {
 		return nil, fmt.Errorf("download file: %w", err)
 	}
+	a.l.RecordModSource(a.instanceGameDir(*targetInst), chosenFile.Filename, "modrinth", projectIDOrSlug)
 	cleanName := strings.TrimSuffix(chosenFile.Filename, filepath.Ext(chosenFile.Filename))
 	return &launcher.ModItem{
 		Filename: chosenFile.Filename,
@@ -733,6 +734,7 @@ func (a *App) InstallCurseForgeMod(instanceID, modIDStr, projectType string) (*l
 	if err := a.l.DownloadModFile(ctx, chosenFile.DownloadURL, destPath); err != nil {
 		return nil, fmt.Errorf("download curseforge file: %w", err)
 	}
+	a.l.RecordModSource(a.instanceGameDir(*targetInst), chosenFile.FileName, "curseforge", modIDStr)
 	cleanName := strings.TrimSuffix(chosenFile.FileName, filepath.Ext(chosenFile.FileName))
 	return &launcher.ModItem{
 		Filename: chosenFile.FileName,
@@ -856,11 +858,19 @@ func (a *App) GetModpackDetails(source, idOrSlug string) (*launcher.ModpackDetai
 
 // InstallModpack downloads and installs a modpack from Modrinth, CurseForge or FTB.
 func (a *App) InstallModpack(source, downloadURL, customName, packID, versionID, versionName string) (*Instance, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	a.mu.Lock()
+	a.packCancel = cancel
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.packCancel = nil
+		a.mu.Unlock()
+		cancel()
+	}()
 
 	progressFn := func(p launcher.ModpackProgress) {
-		runtime.EventsEmit(a.ctx, "modpack-progress", p)
+		a.emit("modpack-progress", p)
 	}
 
 	info, err := a.l.InstallModpackFromURL(ctx, source, downloadURL, customName, progressFn)
@@ -911,7 +921,7 @@ func (a *App) InstallModpack(source, downloadURL, customName, packID, versionID,
 	a.set.ActiveInstance = info.ID
 	a.set.SelectedVersion = info.VersionID
 	_ = a.set.save()
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("instances-updated", a.loadInstances())
 
 	return &newInst, nil
 }
@@ -987,7 +997,7 @@ func (a *App) UpdateInstanceModpack(instanceID, newDownloadURL, newVersionID, ne
 	defer cancel()
 
 	progressFn := func(p launcher.ModpackProgress) {
-		runtime.EventsEmit(a.ctx, "modpack-progress", p)
+		a.emit("modpack-progress", p)
 	}
 
 	progressFn(launcher.ModpackProgress{
@@ -1058,7 +1068,7 @@ func (a *App) UpdateInstanceModpack(instanceID, newDownloadURL, newVersionID, ne
 	}
 
 	_ = a.saveInstances(list)
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("instances-updated", a.loadInstances())
 
 	progressFn(launcher.ModpackProgress{
 		Stage:   "done",
@@ -1169,6 +1179,46 @@ func (a *App) UpdateInstanceMod(instanceID, oldFilename, newURL, newFilename str
 	return fmt.Errorf("instance not found")
 }
 
+// GetModAvailableVersions returns available versions for an installed mod from Modrinth/CurseForge.
+func (a *App) GetModAvailableVersions(instanceID, filename string) (*launcher.ModVersionChangeInfo, error) {
+	var targetInst *Instance
+	for _, inst := range a.loadInstances() {
+		if inst.ID == instanceID {
+			targetInst = &inst
+			break
+		}
+	}
+	if targetInst == nil {
+		return nil, fmt.Errorf("instance not found")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+	defer cancel()
+
+	gameDir := a.instanceGameDir(*targetInst)
+	return a.l.GetModAvailableVersions(ctx, gameDir, filename, targetInst.VersionID, targetInst.Loader)
+}
+
+// ChangeModVersion installs a new version of a mod and deletes the old one.
+func (a *App) ChangeModVersion(instanceID, oldFilename, downloadURL, newFilename, source, projectID string) (*launcher.ContentItem, error) {
+	var targetInst *Instance
+	for _, inst := range a.loadInstances() {
+		if inst.ID == instanceID {
+			targetInst = &inst
+			break
+		}
+	}
+	if targetInst == nil {
+		return nil, fmt.Errorf("instance not found")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	gameDir := a.instanceGameDir(*targetInst)
+	return a.l.ChangeModVersion(ctx, gameDir, oldFilename, downloadURL, newFilename, source, projectID)
+}
+
 // GetInstanceWorlds returns saved worlds for an instance.
 func (a *App) GetInstanceWorlds(id string) ([]launcher.WorldItem, error) {
 	for _, inst := range a.loadInstances() {
@@ -1247,12 +1297,9 @@ func (a *App) PickInstanceIcon(instanceID string) (string, error) {
 		return "", fmt.Errorf("instance not found")
 	}
 
-	p, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Выберите иконку сборки",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Изображения (*.png, *.jpg, *.webp)", Pattern: "*.png;*.jpg;*.jpeg;*.webp"},
-		},
-	})
+	p, err := a.openFileDialog("Выберите иконку сборки", []application.FileFilter{
+		{DisplayName: "Изображения (*.png, *.jpg, *.webp)", Pattern: "*.png;*.jpg;*.jpeg;*.webp"},
+	}, "")
 	if err != nil || p == "" {
 		return "", nil
 	}
@@ -1307,7 +1354,7 @@ func (a *App) UpdateInstanceSettings(instanceID, name, serverAddress, versionID,
 		}
 	}
 	_ = a.saveInstances(list)
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("instances-updated", a.loadInstances())
 	return target, nil
 }
 
@@ -1440,7 +1487,7 @@ func (a *App) CloneInstance(instanceID string) (*Instance, error) {
 	if err := a.saveInstances(list); err != nil {
 		return nil, err
 	}
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("instances-updated", a.loadInstances())
 	return &newInst, nil
 }
 
@@ -1580,7 +1627,7 @@ func (a *App) UpdateInstanceLaunchConfig(instanceID string, ramMB int, javaPath,
 		target.WindowHeight = winH
 	}
 	_ = a.saveInstances(list)
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("instances-updated", a.loadInstances())
 	return target, nil
 }
 
@@ -1598,14 +1645,10 @@ func (a *App) ExportInstance(instanceID string) (string, error) {
 		return "", fmt.Errorf("instance not found")
 	}
 
-	savePath, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Экспорт сборки",
-		DefaultFilename: target.Name + ".mrpack",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Modrinth Modpack (*.mrpack)", Pattern: "*.mrpack"},
-			{DisplayName: "Zip Archive (*.zip)", Pattern: "*.zip"},
-		},
-	})
+	savePath, err := a.saveFileDialog("Экспорт сборки", target.Name+".mrpack", []application.FileFilter{
+		{DisplayName: "Modrinth Modpack (*.mrpack)", Pattern: "*.mrpack"},
+		{DisplayName: "Zip Archive (*.zip)", Pattern: "*.zip"},
+	}, "")
 	if err != nil || savePath == "" {
 		return "", nil
 	}
@@ -1693,12 +1736,9 @@ func (a *App) ExportInstance(instanceID string) (string, error) {
 
 // ImportInstanceDialog opens file dialog to pick an instance archive to import.
 func (a *App) ImportInstanceDialog() (*Instance, error) {
-	p, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Импорт сборки",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Сборки Minecraft (*.mrpack, *.zip)", Pattern: "*.mrpack;*.zip"},
-		},
-	})
+	p, err := a.openFileDialog("Импорт сборки", []application.FileFilter{
+		{DisplayName: "Сборки Minecraft (*.mrpack, *.zip)", Pattern: "*.mrpack;*.zip"},
+	}, "")
 	if err != nil || p == "" {
 		return nil, nil
 	}
@@ -1850,7 +1890,7 @@ func (a *App) ImportInstanceFile(filePath string) (*Instance, error) {
 	a.set.ActiveInstance = instID
 	a.set.SelectedVersion = mcVer
 	_ = a.set.save()
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("instances-updated", a.loadInstances())
 
 	return &newInst, nil
 }
@@ -1873,7 +1913,7 @@ func (a *App) CreateGroup(name string) error {
 	if err := a.set.save(); err != nil {
 		return err
 	}
-	runtime.EventsEmit(a.ctx, "settings-updated", a.set)
+	a.emit("settings-updated", a.set)
 	return nil
 }
 
@@ -1913,8 +1953,8 @@ func (a *App) RenameGroup(oldName, newName string) error {
 		_ = a.saveInstances(list)
 	}
 
-	runtime.EventsEmit(a.ctx, "settings-updated", a.set)
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("settings-updated", a.set)
+	a.emit("instances-updated", a.loadInstances())
 	return nil
 }
 
@@ -1949,8 +1989,8 @@ func (a *App) DeleteGroup(name string) error {
 		_ = a.saveInstances(list)
 	}
 
-	runtime.EventsEmit(a.ctx, "settings-updated", a.set)
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("settings-updated", a.set)
+	a.emit("instances-updated", a.loadInstances())
 	return nil
 }
 
@@ -1987,11 +2027,11 @@ func (a *App) UpdateInstanceGroup(instanceID, group string) (*Instance, error) {
 		if !hasGroup {
 			a.set.Groups = append(a.set.Groups, group)
 			_ = a.set.save()
-			runtime.EventsEmit(a.ctx, "settings-updated", a.set)
+			a.emit("settings-updated", a.set)
 		}
 	}
 
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("instances-updated", a.loadInstances())
 	return found, nil
 }
 
@@ -2019,7 +2059,7 @@ func (a *App) ReorderInstances(orderedIDs []string) error {
 	if err := a.saveInstances(list); err != nil {
 		return err
 	}
-	runtime.EventsEmit(a.ctx, "instances-updated", a.loadInstances())
+	a.emit("instances-updated", a.loadInstances())
 	return nil
 }
 
@@ -2043,7 +2083,7 @@ func (a *App) VerifyInstanceFiles(instanceID string) (VerifyResult, error) {
 	defer cancel()
 
 	emit := func(p launcher.ProgressEvent) {
-		runtime.EventsEmit(a.ctx, "verify-progress", p)
+		a.emit("verify-progress", p)
 	}
 
 	var v *launcher.VersionJSON

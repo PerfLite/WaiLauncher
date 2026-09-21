@@ -20,6 +20,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
 import {renderMarkdown, handleMarkdownClick} from '../utils/markdown'
+import ChangeModVersionModal from '../components/ChangeModVersionModal.vue'
 import modrinthIcon from '../assets/modrinth-icon.png'
 import curseforgeIcon from '../assets/curseforge-icon.png'
 import ftbIcon from '../assets/ftb-icon.png'
@@ -48,6 +49,26 @@ const updatesMap = ref({})
 const checkingUpdates = ref(false)
 const updatingMap = ref({})
 const activeRowMenu = ref(null)
+
+/* Change Mod Version */
+const changeVersionModalOpen = ref(false)
+const changeVersionItem = ref(null)
+
+function openChangeVersion(item) {
+  activeRowMenu.value = null
+  changeVersionItem.value = item
+  changeVersionModalOpen.value = true
+}
+
+function onModVersionChanged({oldFilename, item}) {
+  if (!item) return
+  const idx = allContent.value.findIndex(i => i.filename === oldFilename)
+  if (idx !== -1) {
+    allContent.value[idx] = item
+  } else {
+    allContent.value.push(item)
+  }
+}
 
 const worldsList = ref([])
 const loadingWorlds = ref(false)
@@ -1192,7 +1213,7 @@ async function saveInstanceSettings() {
             >
               <div class="mr-bcard-icon">
                 <img v-if="hit.icon_url" :src="hit.icon_url" alt="" loading="lazy">
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
               </div>
 
               <div class="mr-bcard-main">
@@ -1273,7 +1294,7 @@ async function saveInstanceSettings() {
               <h1 class="mr-header-title">{{ selectedInst.name }}</h1>
               <div class="mr-header-meta">
                 <span class="mr-meta-pill">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-mini-icon"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-mini-icon"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
                   {{ t('loader.' + selectedInst.loader) }} {{ selectedInst.versionId }}
                 </span>
                 <span v-if="selectedInst.modpackSource" class="mr-meta-pill modpack-source" :class="selectedInst.modpackSource">
@@ -1635,6 +1656,18 @@ async function saveInstanceSettings() {
                     </svg>
                   </button>
 
+                  <!-- 1.5 Change Mod Version Button (⇄ swap icon like Modrinth App) -->
+                  <button
+                    v-if="item.type === 'mod'"
+                    class="mr-btn-action-icon mr-btn-change-ver"
+                    title="Сменить версию"
+                    @click.stop="openChangeVersion(item)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="m16 3 4 4-4 4 M20 7H4 M8 21l-4-4 4-4 M4 17h16"/>
+                    </svg>
+                  </button>
+
                   <!-- 2. Clean Green Toggle Switch -->
                   <button
                     class="mr-toggle-switch"
@@ -1668,6 +1701,12 @@ async function saveInstanceSettings() {
                       </svg>
                     </button>
                     <div v-if="activeRowMenu === item.filename" class="mr-row-popup-menu" @click.stop="activeRowMenu = null">
+                      <div v-if="item.type === 'mod'" class="mr-popup-item" @click="openChangeVersion(item)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="m16 3 4 4-4 4 M20 7H4 M8 21l-4-4 4-4 M4 17h16"/>
+                        </svg>
+                        <span>Сменить версию</span>
+                      </div>
                       <div class="mr-popup-item" @click="showInExplorer(item)">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
                         <span>Показать в папке</span>
@@ -2342,5 +2381,14 @@ async function saveInstanceSettings() {
         </div>
       </div>
     </div>
+
+    <!-- Change Mod Version Modal -->
+    <ChangeModVersionModal
+      :show="changeVersionModalOpen"
+      :instance-id="selectedInst?.id || ''"
+      :item="changeVersionItem"
+      @close="changeVersionModalOpen = false"
+      @version-changed="onModVersionChanged"
+    />
   </section>
 </template>

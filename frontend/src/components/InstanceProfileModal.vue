@@ -1,7 +1,7 @@
-<script setup>
 import {ref, watch, computed} from 'vue'
 import {t} from '../i18n'
 import {toast} from '../store'
+import ChangeModVersionModal from './ChangeModVersionModal.vue'
 import {
   GetInstalledMods,
   ToggleMod,
@@ -34,6 +34,19 @@ const installingMap = ref({})
 
 const logsText = ref('')
 const loadingLogs = ref(false)
+
+/* Change Mod Version */
+const changeVersionModalOpen = ref(false)
+const changeVersionItem = ref(null)
+
+function openChangeVersion(m) {
+  changeVersionItem.value = m
+  changeVersionModalOpen.value = true
+}
+
+function onModVersionChanged() {
+  loadMods()
+}
 
 const isVanilla = computed(() => !props.inst || props.inst.loader === 'vanilla')
 
@@ -266,7 +279,7 @@ function formatNumber(num) {
       <!-- Navigation Tabs -->
       <div class="profile-tabs">
         <button class="tab-btn" :class="{active: tab === 'mods'}" @click="tab = 'mods'">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
           {{ t('profile.modsTab') }} ({{ installedMods.length }})
         </button>
         <button class="tab-btn" :class="{active: tab === 'catalog'}" @click="tab = 'catalog'">
@@ -318,6 +331,11 @@ function formatNumber(num) {
                 </div>
               </div>
               <div class="mod-item-actions">
+                <button class="mod-btn-action" title="Сменить версию" @click.stop="openChangeVersion(m)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m16 3 4 4-4 4 M20 7H4 M8 21l-4-4 4-4 M4 17h16"/>
+                  </svg>
+                </button>
                 <label class="switch" :title="m.enabled ? 'Отключить' : 'Включить'">
                   <input type="checkbox" :checked="m.enabled" @change="onToggleMod(m)">
                   <i></i>
@@ -428,5 +446,14 @@ function formatNumber(num) {
         </div>
       </div>
     </div>
+
+    <!-- Change Mod Version Modal -->
+    <ChangeModVersionModal
+      :show="changeVersionModalOpen"
+      :instance-id="inst?.id || ''"
+      :item="changeVersionItem"
+      @close="changeVersionModalOpen = false"
+      @version-changed="onModVersionChanged"
+    />
   </div>
 </template>

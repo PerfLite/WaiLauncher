@@ -60,6 +60,8 @@ type ModpackDetails struct {
 	Item     ModpackItem          `json:"item"`
 	Versions []ModpackVersionItem `json:"versions"`
 	Body     string               `json:"body"`
+	WebURL   string               `json:"webUrl"`
+	Gallery  []string             `json:"gallery"`
 }
 
 // ModpackProgress is sent during modpack installation.
@@ -386,6 +388,17 @@ func (l *Launcher) getModrinthModpackDetails(ctx context.Context, idOrSlug strin
 		})
 	}
 
+	var galleryURLs []string
+	for _, g := range p.Gallery {
+		if g.URL != "" {
+			galleryURLs = append(galleryURLs, g.URL)
+		}
+	}
+	webURL := fmt.Sprintf("https://modrinth.com/modpack/%s", p.Slug)
+	if p.Slug == "" {
+		webURL = fmt.Sprintf("https://modrinth.com/modpack/%s", p.ID)
+	}
+
 	return &ModpackDetails{
 		Item: ModpackItem{
 			ID:           p.ID,
@@ -404,6 +417,8 @@ func (l *Launcher) getModrinthModpackDetails(ctx context.Context, idOrSlug strin
 		},
 		Versions: verItems,
 		Body:     p.Body,
+		WebURL:   webURL,
+		Gallery:  galleryURLs,
 	}, nil
 }
 
@@ -438,6 +453,9 @@ func (l *Launcher) getCurseForgeModpackDetails(ctx context.Context, idStr string
 				URL          string `json:"url"`
 				ThumbnailURL string `json:"thumbnailUrl"`
 			} `json:"logo"`
+			Screenshots []struct {
+				URL string `json:"url"`
+			} `json:"screenshots"`
 			Authors []struct {
 				Name string `json:"name"`
 			} `json:"authors"`
@@ -446,6 +464,25 @@ func (l *Launcher) getCurseForgeModpackDetails(ctx context.Context, idStr string
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&mRes); err != nil {
 		return nil, err
+	}
+
+	// 1b. Fetch full description HTML from CurseForge API
+	fullDescription := mRes.Data.Summary
+	descReq, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/mods/%s/description", curseForgeAPI, url.PathEscape(idStr)), nil)
+	if err == nil {
+		descReq.Header.Set("x-api-key", curseForgeKey)
+		descReq.Header.Set("User-Agent", "WaiLauncher/0.1.0")
+		if descResp, err := httpClient.Do(descReq); err == nil {
+			if descResp.StatusCode == http.StatusOK {
+				var descObj struct {
+					Data string `json:"data"`
+				}
+				if err := json.NewDecoder(descResp.Body).Decode(&descObj); err == nil && descObj.Data != "" {
+					fullDescription = descObj.Data
+				}
+			}
+			descResp.Body.Close()
+		}
 	}
 
 	// 2. Fetch files (versions)
@@ -501,6 +538,14 @@ func (l *Launcher) getCurseForgeModpackDetails(ctx context.Context, idStr string
 		author = mRes.Data.Authors[0].Name
 	}
 
+	var galleryURLs []string
+	for _, s := range mRes.Data.Screenshots {
+		if s.URL != "" {
+			galleryURLs = append(galleryURLs, s.URL)
+		}
+	}
+	webURL := fmt.Sprintf("https://www.curseforge.com/minecraft/modpacks/%s", mRes.Data.Slug)
+
 	return &ModpackDetails{
 		Item: ModpackItem{
 			ID:           fmt.Sprintf("%d", mRes.Data.ID),
@@ -515,6 +560,9 @@ func (l *Launcher) getCurseForgeModpackDetails(ctx context.Context, idStr string
 			DateModified: mRes.Data.DateModified,
 		},
 		Versions: verItems,
+		Body:     fullDescription,
+		WebURL:   webURL,
+		Gallery:  galleryURLs,
 	}, nil
 }
 
@@ -1435,6 +1483,14 @@ func (l *Launcher) getFTBModpackDetails(ctx context.Context, idOrSlug string) (*
 		verItems[i], verItems[j] = verItems[j], verItems[i]
 	}
 
+	var galleryURLs []string
+	for _, a := range p.Art {
+		if a.URL != "" && a.Type != "square" && a.Type != "logo" {
+			galleryURLs = append(galleryURLs, a.URL)
+		}
+	}
+	webURL := fmt.Sprintf("https://www.feed-the-beast.com/modpacks/%d", p.ID)
+
 	return &ModpackDetails{
 		Item: ModpackItem{
 			ID:           fmt.Sprintf("%d", p.ID),
@@ -1451,6 +1507,8 @@ func (l *Launcher) getFTBModpackDetails(ctx context.Context, idOrSlug string) (*
 		},
 		Versions: verItems,
 		Body:     p.Description,
+		WebURL:   webURL,
+		Gallery:  galleryURLs,
 	}, nil
 }
 

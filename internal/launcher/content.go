@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,10 +35,40 @@ type ContentItem struct {
 	AuthorAvatar string `json:"authorAvatar"`
 	IconURL      string `json:"iconUrl"`
 	Sha1         string `json:"sha1"`
+	Source       string `json:"source,omitempty"`
+	ProjectID    string `json:"projectId,omitempty"`
 	HasUpdate    bool   `json:"hasUpdate"`
 	UpdateVer    string `json:"updateVer"`
 	UpdateURL    string `json:"updateUrl"`
 	UpdateFile   string `json:"updateFile"`
+}
+
+// ModVersionOption represents a version choice for switching versions of an installed mod.
+type ModVersionOption struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	VersionNumber string   `json:"versionNumber"`
+	GameVersions  []string `json:"gameVersions"`
+	Loaders       []string `json:"loaders"`
+	DownloadURL   string   `json:"downloadUrl"`
+	Filename      string   `json:"filename"`
+	FileSize      int64    `json:"fileSize"`
+	DatePublished string   `json:"datePublished"`
+	IsCurrent     bool     `json:"isCurrent"`
+	VersionType   string   `json:"versionType"` // "release" | "beta" | "alpha"
+	Changelog     string   `json:"changelog"`
+	IsCompatible  bool     `json:"isCompatible"`
+}
+
+// ModVersionChangeInfo contains info and candidate versions for changing a mod's version.
+type ModVersionChangeInfo struct {
+	Filename       string             `json:"filename"`
+	ModName        string             `json:"modName"`
+	Source         string             `json:"source"` // "modrinth" | "curseforge"
+	CurrentVersion string             `json:"currentVersion"`
+	CurrentSha1    string             `json:"currentSha1"`
+	ProjectID      string             `json:"projectId"`
+	Versions       []ModVersionOption `json:"versions"`
 }
 
 // WorldItem represents a Minecraft world save in saves/.
@@ -58,6 +89,8 @@ type CachedModMeta struct {
 	AuthorAvatar string `json:"authorAvatar,omitempty"`
 	Version      string `json:"version"`
 	HasLocalIcon bool   `json:"hasLocalIcon,omitempty"`
+	Source       string `json:"source,omitempty"`
+	ProjectID    string `json:"projectId,omitempty"`
 }
 
 var (
@@ -172,6 +205,8 @@ func (l *Launcher) enrichModsMetadata(instDir string, items []ContentItem) {
 				it.Version = meta.Version
 			}
 			it.Sha1 = meta.Sha1
+			it.Source = meta.Source
+			it.ProjectID = meta.ProjectID
 
 			if meta.IconURL != "" {
 				it.IconURL = meta.IconURL
@@ -201,6 +236,8 @@ func (l *Launcher) enrichModsMetadata(instDir string, items []ContentItem) {
 		h, _ := calcFileSHA1(jarPath)
 		it.Sha1 = h
 		extracted.Sha1 = h
+		it.Source = extracted.Source
+		it.ProjectID = extracted.ProjectID
 
 		// Save local icon PNG if found
 		if len(iconBytes) > 0 && h != "" {
@@ -663,3 +700,358 @@ func containsDigit(s string) bool {
 	}
 	return false
 }
+
+func cleanModSearchQuery(raw string) string {
+	s := strings.TrimSuffix(raw, filepath.Ext(raw))
+	s = strings.TrimSuffix(s, ".disabled")
+	s = strings.TrimLeft(s, "_!.-#+ ")
+	baseName, _ := parseModNameAndVersion(s)
+	baseName = strings.TrimSpace(baseName)
+	if baseName != "" && len(baseName) >= 2 {
+		return baseName
+	}
+	return strings.TrimSpace(s)
+}
+
+// RecordModSource saves the source and project ID for an installed mod.
+func (l *Launcher) RecordModSource(instDir, filename, source, projectID string) {
+	cacheFile := filepath.Join(instDir, ".wailauncher_mod_cache.json")
+	diskCache := loadModCache(cacheFile)
+	cur := diskCache[filename]
+	cur.Source = source
+	cur.ProjectID = projectID
+	diskCache[filename] = cur
+	saveModCache(cacheFile, diskCache)
+
+	metaCacheMu.Lock()
+	m := metaMemCache[filename]
+	m.Source = source
+	m.ProjectID = projectID
+	metaMemCache[filename] = m
+	metaCacheMu.Unlock()
+}
+
+// GetModAvailableVersions discovers the mod on Modrinth or CurseForge and returns candidate versions.
+func (l *Launcher) GetModAvailableVersions(ctx context.Context, instDir, filename, mcVer, loader string) (*ModVersionChangeInfo, error) {
+	modsDir := filepath.Join(instDir, "mods")
+	jarPath := filepath.Join(modsDir, filename)
+	if _, err := os.Stat(jarPath); err != nil {
+		if strings.HasSuffix(filename, ".disabled") {
+			alt := strings.TrimSuffix(filename, ".disabled")
+			if _, aErr := os.Stat(filepath.Join(modsDir, alt)); aErr == nil {
+				jarPath = filepath.Join(modsDir, alt)
+				filename = alt
+			}
+		} else {
+			alt := filename + ".disabled"
+			if _, aErr := os.Stat(filepath.Join(modsDir, alt)); aErr == nil {
+				jarPath = filepath.Join(modsDir, alt)
+				filename = alt
+			}
+		}
+	}
+
+	h, _ := calcFileSHA1(jarPath)
+
+	cacheFile := filepath.Join(instDir, ".wailauncher_mod_cache.json")
+	diskCache := loadModCache(cacheFile)
+	meta := diskCache[filename]
+
+	source := meta.Source
+	projectID := meta.ProjectID
+	modTitle := meta.Title
+	if modTitle == "" {
+		extracted, _ := extractMetadataFromJar(jarPath)
+		if extracted.Title != "" {
+			modTitle = extracted.Title
+		} else {
+			modTitle = strings.TrimSuffix(strings.TrimSuffix(filename, ".disabled"), filepath.Ext(filename))
+		}
+	}
+
+	// 1. If source/projectID unknown, check Modrinth by hash
+	if (source == "" || projectID == "") && h != "" {
+		reqPayload := map[string]any{
+			"hashes":    []string{h},
+			"algorithm": "sha1",
+		}
+		reqBody, _ := json.Marshal(reqPayload)
+		req, err := http.NewRequestWithContext(ctx, "POST", modrinthAPI+"/version_files", bytes.NewReader(reqBody))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("User-Agent", "WaiLauncher/0.1.0")
+			if resp, err := httpClient.Do(req); err == nil {
+				if resp.StatusCode == http.StatusOK {
+					var mrRes map[string]ModrinthVersion
+					if err := json.NewDecoder(resp.Body).Decode(&mrRes); err == nil {
+						if mv, ok := mrRes[h]; ok && mv.ProjectID != "" {
+							source = "modrinth"
+							projectID = mv.ProjectID
+						}
+					}
+				}
+				resp.Body.Close()
+			}
+		}
+	}
+
+	// 2. If still unknown, search Modrinth by clean title
+	if source == "" || projectID == "" {
+		cleanName := cleanModSearchQuery(modTitle)
+		if cleanName != "" {
+			sr, err := l.SearchModrinth(ctx, cleanName, "mod", "", "", 0, 5)
+			if (err != nil || len(sr.Hits) == 0) && cleanName != modTitle {
+				sr, err = l.SearchModrinth(ctx, modTitle, "mod", "", "", 0, 5)
+			}
+			if err == nil && len(sr.Hits) > 0 {
+				source = "modrinth"
+				projectID = sr.Hits[0].ProjectID
+				if modTitle == "" {
+					modTitle = sr.Hits[0].Title
+				}
+			}
+		}
+	}
+
+	// 3. If still unknown, search CurseForge by clean title
+	if source == "" || projectID == "" {
+		cleanName := cleanModSearchQuery(modTitle)
+		if cleanName != "" {
+			sr, err := l.SearchCurseForge(ctx, cleanName, "mod", "", "", 0, 5)
+			if (err != nil || len(sr.Hits) == 0) && cleanName != modTitle {
+				sr, err = l.SearchCurseForge(ctx, modTitle, "mod", "", "", 0, 5)
+			}
+			if err == nil && len(sr.Hits) > 0 {
+				source = "curseforge"
+				projectID = sr.Hits[0].ProjectID
+				if modTitle == "" {
+					modTitle = sr.Hits[0].Title
+				}
+			}
+		}
+	}
+
+	if source == "" || projectID == "" {
+		return nil, fmt.Errorf("не удалось найти проект мода «%s» на Modrinth или CurseForge", cleanModSearchQuery(modTitle))
+	}
+
+	// Save resolved source & projectID in cache
+	meta.Source = source
+	meta.ProjectID = projectID
+	meta.Title = modTitle
+	diskCache[filename] = meta
+	saveModCache(cacheFile, diskCache)
+	metaCacheMu.Lock()
+	metaMemCache[filename] = meta
+	metaCacheMu.Unlock()
+
+	var options []ModVersionOption
+
+	if source == "modrinth" {
+		versions, err := l.GetModrinthProjectVersions(ctx, projectID, "", "")
+		if err != nil {
+			return nil, fmt.Errorf("ошибка загрузки версий с Modrinth: %w", err)
+		}
+		for _, v := range versions {
+			var dlURL, fName string
+			var fSize int64
+			var fHash string
+			for _, f := range v.Files {
+				if f.Primary || dlURL == "" {
+					dlURL = f.URL
+					fName = f.Filename
+					fSize = f.Size
+					if f.Hashes != nil {
+						fHash = f.Hashes["sha1"]
+					}
+				}
+			}
+			isCur := false
+			if (h != "" && fHash != "" && strings.EqualFold(h, fHash)) || fName == filename {
+				isCur = true
+			}
+			vType := strings.ToLower(v.VersionType)
+			if vType == "" {
+				vType = "release"
+			}
+
+			isComp := true
+			if mcVer != "" && len(v.GameVersions) > 0 {
+				matched := false
+				for _, gv := range v.GameVersions {
+					if gv == mcVer || strings.HasPrefix(mcVer, gv) || strings.HasPrefix(gv, mcVer) {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					isComp = false
+				}
+			}
+			if isComp && loader != "" && loader != "vanilla" && len(v.Loaders) > 0 {
+				matched := false
+				for _, ld := range v.Loaders {
+					if strings.EqualFold(ld, loader) {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					isComp = false
+				}
+			}
+
+			options = append(options, ModVersionOption{
+				ID:            v.ID,
+				Name:          v.Name,
+				VersionNumber: v.VersionNum,
+				GameVersions:  v.GameVersions,
+				Loaders:       v.Loaders,
+				DownloadURL:   dlURL,
+				Filename:      fName,
+				FileSize:      fSize,
+				DatePublished: v.DatePublished,
+				IsCurrent:     isCur,
+				VersionType:   vType,
+				Changelog:     v.Changelog,
+				IsCompatible:  isComp,
+			})
+		}
+	} else if source == "curseforge" {
+		cfID, err := strconv.Atoi(projectID)
+		if err != nil {
+			return nil, fmt.Errorf("неверный ID CurseForge: %s", projectID)
+		}
+		files, err := l.GetCurseForgeModFiles(ctx, cfID, "", "")
+		if err != nil {
+			return nil, fmt.Errorf("ошибка загрузки файлов с CurseForge: %w", err)
+		}
+		for _, f := range files {
+			dl := f.DownloadURL
+			if dl == "" {
+				dl = fmt.Sprintf("https://edge.forgecdn.net/files/%d/%d/%s", f.ID/1000, f.ID%1000, url.PathEscape(f.FileName))
+			}
+			vType := "release"
+			switch f.ReleaseType {
+			case 2:
+				vType = "beta"
+			case 3:
+				vType = "alpha"
+			}
+			isCur := (f.FileName == filename || strings.TrimSuffix(filename, ".disabled") == f.FileName)
+
+			isComp := true
+			if mcVer != "" && len(f.GameVersions) > 0 {
+				matched := false
+				for _, gv := range f.GameVersions {
+					if gv == mcVer || strings.HasPrefix(mcVer, gv) || strings.HasPrefix(gv, mcVer) {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					isComp = false
+				}
+			}
+
+			options = append(options, ModVersionOption{
+				ID:            fmt.Sprintf("%d", f.ID),
+				Name:          f.DisplayName,
+				VersionNumber: f.DisplayName,
+				GameVersions:  f.GameVersions,
+				DownloadURL:   dl,
+				Filename:      f.FileName,
+				FileSize:      f.FileLength,
+				DatePublished: f.FileDate,
+				IsCurrent:     isCur,
+				VersionType:   vType,
+				Changelog:     "",
+				IsCompatible:  isComp,
+			})
+		}
+	}
+
+	return &ModVersionChangeInfo{
+		Filename:       filename,
+		ModName:        modTitle,
+		Source:         source,
+		CurrentVersion: meta.Version,
+		CurrentSha1:    h,
+		ProjectID:      projectID,
+		Versions:       options,
+	}, nil
+}
+
+// ChangeModVersion downloads a new version of a mod, removes the old file, and returns updated item.
+func (l *Launcher) ChangeModVersion(ctx context.Context, instDir, oldFilename, downloadURL, newFilename, source, projectID string) (*ContentItem, error) {
+	modsDir := filepath.Join(instDir, "mods")
+	_ = os.MkdirAll(modsDir, 0755)
+	destPath := filepath.Join(modsDir, newFilename)
+
+	if err := l.DownloadModFile(ctx, downloadURL, destPath); err != nil {
+		return nil, fmt.Errorf("download mod file: %w", err)
+	}
+
+	if oldFilename != "" && oldFilename != newFilename {
+		_ = os.Remove(filepath.Join(modsDir, oldFilename))
+		_ = os.Remove(filepath.Join(modsDir, oldFilename+".disabled"))
+		_ = os.Remove(strings.TrimSuffix(filepath.Join(modsDir, oldFilename), ".disabled"))
+	}
+
+	h, _ := calcFileSHA1(destPath)
+	extracted, iconBytes := extractMetadataFromJar(destPath)
+	if extracted.Title == "" {
+		extracted.Title = strings.TrimSuffix(newFilename, filepath.Ext(newFilename))
+	}
+	extracted.Sha1 = h
+	extracted.Source = source
+	extracted.ProjectID = projectID
+
+	iconsDir := filepath.Join(instDir, ".wailauncher_icons")
+	_ = os.MkdirAll(iconsDir, 0755)
+	iconURL := ""
+	if len(iconBytes) > 0 && h != "" {
+		localIcon := filepath.Join(iconsDir, h+".png")
+		_ = os.WriteFile(localIcon, iconBytes, 0644)
+		extracted.HasLocalIcon = true
+		iconURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(iconBytes)
+	}
+
+	cacheFile := filepath.Join(instDir, ".wailauncher_mod_cache.json")
+	diskCache := loadModCache(cacheFile)
+	if oldFilename != "" {
+		delete(diskCache, oldFilename)
+	}
+	diskCache[newFilename] = extracted
+	saveModCache(cacheFile, diskCache)
+
+	metaCacheMu.Lock()
+	if oldFilename != "" {
+		delete(metaMemCache, oldFilename)
+	}
+	metaMemCache[newFilename] = extracted
+	metaCacheMu.Unlock()
+
+	fi, _ := os.Stat(destPath)
+	var size, modTime int64
+	if fi != nil {
+		size = fi.Size()
+		modTime = fi.ModTime().Unix()
+	}
+
+	return &ContentItem{
+		Filename:  newFilename,
+		Name:      extracted.Title,
+		Version:   extracted.Version,
+		Type:      "mod",
+		Enabled:   !strings.HasSuffix(strings.ToLower(newFilename), ".disabled"),
+		Size:      size,
+		ModTime:   modTime,
+		Author:    extracted.Author,
+		IconURL:   iconURL,
+		Sha1:      h,
+		Source:    source,
+		ProjectID: projectID,
+	}, nil
+}
+

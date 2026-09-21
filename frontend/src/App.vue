@@ -138,6 +138,10 @@ onMounted(async () => {
       checkAllModpackUpdates()
     }
   })
+
+  EventsOn('open-about-modal', () => {
+    store.aboutModalOpen = true
+  })
 })
 
 watch(() => store.maximized, (v) => {

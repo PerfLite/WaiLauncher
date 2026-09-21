@@ -4,8 +4,7 @@ import (
 	_ "embed"
 	goruntime "runtime"
 
-	"github.com/energye/systray"
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed build/windows/icon.ico
@@ -18,44 +17,64 @@ func (a *App) startTray() {
 	if goruntime.GOOS != "windows" {
 		return
 	}
-	go systray.Run(func() {
-		systray.SetIcon(trayIconBytes)
-		systray.SetTitle("WaiLauncher")
-		systray.SetTooltip("WaiLauncher")
+	app := a.app
+	if app == nil {
+		app = application.Get()
+	}
+	if app == nil {
+		return
+	}
 
-		itemShow := systray.AddMenuItem("Показать лаунчер", "Открыть окно WaiLauncher")
-		itemStop := systray.AddMenuItem("Остановить игру", "Завершить запущенную игру")
-		systray.AddSeparator()
-		itemQuit := systray.AddMenuItem("Выход", "Закрыть WaiLauncher")
+	tray := app.SystemTray.New()
+	tray.SetIcon(trayIconBytes)
+	tray.SetTooltip("WaiLauncher")
 
-		itemStop.Disable()
-		a.trayStopItem = itemStop
+	menu := application.NewMenu()
+	itemShow := menu.Add("Показать лаунчер")
+	itemShow.OnClick(func(ctx *application.Context) {
+		if a.win != nil {
+			a.win.Show()
+			a.win.UnMinimise()
+			a.win.Focus()
+		}
+	})
 
-		itemShow.Click(func() {
-			wruntime.WindowShow(a.ctx)
-			wruntime.WindowUnminimise(a.ctx)
-		})
-		itemStop.Click(func() {
-			a.StopGame()
-		})
-		itemQuit.Click(func() {
-			wruntime.Quit(a.ctx)
-		})
-	}, func() {})
+	itemStop := menu.Add("Остановить игру")
+	itemStop.SetEnabled(false)
+	itemStop.OnClick(func(ctx *application.Context) {
+		a.StopGame()
+	})
+	a.trayStopItem = itemStop
+
+	menu.AddSeparator()
+	itemAbout := menu.Add("О программе")
+	itemAbout.OnClick(func(ctx *application.Context) {
+		if a.win != nil {
+			a.win.Show()
+			a.win.UnMinimise()
+			a.win.Focus()
+			a.emit("open-about-modal")
+		}
+	})
+	itemQuit := menu.Add("Выход")
+	itemQuit.OnClick(func(ctx *application.Context) {
+		app.Quit()
+	})
+
+	tray.SetMenu(menu)
+	tray.OnClick(func() {
+		if a.win != nil {
+			a.win.Show()
+			a.win.UnMinimise()
+			a.win.Focus()
+		}
+	})
+	tray.Run()
 }
 
 // updateTrayPlaying toggles the "Stop game" tray item based on game state.
 func (a *App) updateTrayPlaying(playing bool) {
-	item, _ := a.trayStopItem.(interface {
-		Enable()
-		Disable()
-	})
-	if item == nil {
-		return
-	}
-	if playing {
-		item.Enable()
-	} else {
-		item.Disable()
+	if a.trayStopItem != nil {
+		a.trayStopItem.SetEnabled(playing)
 	}
 }

@@ -1,13 +1,13 @@
 # WaiLauncher
 
-![Version](https://img.shields.io/badge/version-1.1.2-brightgreen)
-![Go](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go&logoColor=white)
-![Wails](https://img.shields.io/badge/wails-v2-red)
+![Version](https://img.shields.io/badge/version-1.1.3-brightgreen)
+![Go](https://img.shields.io/badge/go-1.25+-00ADD8?logo=go&logoColor=white)
+![Wails](https://img.shields.io/badge/wails-v3-red)
 ![Vue](https://img.shields.io/badge/vue-3.x-4FC08D?logo=vuedotjs&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6)
 ![License](https://img.shields.io/badge/license-GPL--3.0-007ec6)
 
-Современный, быстрый и функциональный настольный лаунчер Minecraft на **Wails v2** (Go + Vue 3). Поддерживает запуск ванильной игры, модлоадеров (Fabric, Forge, NeoForge, Quilt), изоляцию сборок с собственными папками, кастомизацию скинов/плащей с 3D-предпросмотром, а также установку модов и модпаков напрямую из **Modrinth**, **CurseForge** и **FTB (Feed The Beast)** с функцией **автообновления сборок в 1 клик**.
+Современный, быстрый и функциональный настольный лаунчер Minecraft на **Wails v3** (Go + Vue 3). Поддерживает запуск ванильной игры, модлоадеров (Fabric, Forge, NeoForge, Quilt), изоляцию сборок с собственными папками, кастомизацию скинов/плащей с 3D-предпросмотром, а также установку модов и модпаков напрямую из **Modrinth**, **CurseForge** и **FTB (Feed The Beast)** с функцией **автообновления сборок в 1 клик**.
 
 ![WaiLauncher](screenshots/WaiLauncher.png)
 
@@ -23,11 +23,12 @@
 
 ### 📦 Каталог модов и сборок (Modrinth, CurseForge & FTB)
 - **Моды, ресурспаки и шейдеры** — полнотекстовый поиск и установка напрямую из двух крупнейших каталогов: **Modrinth** и **CurseForge**.
+- **Смена версии любого мода** — удобное окно со всеми доступными релизами мода (Modrinth / CurseForge), фильтрацией и проверкой совместимости с версией Minecraft и загрузчиком сборки.
 - **Сборки Feed The Beast (FTB)** — интеграция с официальной базой модов и сборок FTB App.
 - **Автообновление сборок в 1 клик** — автоматическое отслеживание обновлений установленных сборок от авторов на Modrinth, CurseForge и FTB с сохранением миров (`saves/`), скриншотов и персональных настроек (`options.txt`).
 - **Разрешение зависимостей в 1 клик** — автоматический анализ и предложение установки недостающих библиотек для выбранных модов.
 - **Импорт готовых сборок** — автоматическое обнаружение и импорт установленных сборок из Modrinth App, CurseForge, Prism, MultiMC, ATLauncher и FTB App, а также импорт `.mrpack` и `.zip`.
-- **Менеджер контента** — включение, отключение, удаление и пакетная проверка обновлений установленных модов.
+- **Менеджер контента и Markdown** — включение, отключение, удаление и пакетная проверка обновлений установленных модов с поддержкой рендеринга Markdown-описаний.
 
 ### 🛠️ Изоляция и управление сборками (Instances)
 - **Профили сборок** — каждая сборка полностью изолирована в собственной директории.
