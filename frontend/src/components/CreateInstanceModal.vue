@@ -11,7 +11,22 @@ import {
   ScanCustomLauncherDir,
   ImportSelectedInstances
 } from 'bindings/WaiLauncher/app'
+import {
+  DialogRoot,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+} from 'reka-ui'
 import {onEvent} from '@/utils/wailsEvents'
+
+const isModalOpen = computed({
+  get: () => store.createInstanceModalOpen,
+  set: (val: boolean) => {
+    if (!val && !creating.value && !importingSelected.value && !importingInst.value) {
+      closeCreate()
+    }
+  },
+})
 
 const currentStep = ref<'menu' | 'custom' | 'import_launchers'>('menu')
 const createSearch = ref('')
@@ -310,9 +325,11 @@ async function onImportMrpackFile() {
 </script>
 
 <template>
-  <div class="modal-root" v-if="store.createInstanceModalOpen">
-    <div class="modal-backdrop" @click="closeCreate"></div>
-    <div class="modal-box create-modal" :class="{'menu-mode': currentStep === 'menu'}">
+  <DialogRoot v-model:open="isModalOpen">
+    <DialogPortal>
+      <div class="modal-root">
+        <DialogOverlay class="modal-backdrop" />
+        <DialogContent class="modal-box create-modal outline-none" :class="{'menu-mode': currentStep === 'menu'}">
       
       <!-- 1. MENU STEP (Modrinth style) -->
       <template v-if="currentStep === 'menu'">
@@ -608,6 +625,8 @@ async function onImportMrpackFile() {
         </div>
       </template>
 
-    </div>
-  </div>
+        </DialogContent>
+      </div>
+    </DialogPortal>
+  </DialogRoot>
 </template>

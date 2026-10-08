@@ -4,6 +4,12 @@ import {t} from '../i18n'
 import {toast} from '../store'
 import ChangeModVersionModal from './ChangeModVersionModal.vue'
 import {
+  DialogRoot,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+} from 'reka-ui'
+import {
   GetInstalledMods,
   ToggleMod,
   DeleteMod,
@@ -244,9 +250,11 @@ function formatNumber(num: any) {
 </script>
 
 <template>
-  <div class="modal-root" v-if="open && inst">
-    <div class="modal-backdrop" @click="emit('close')"></div>
-    <div class="modal-box profile-modal">
+  <DialogRoot :open="open && !!inst" @update:open="(val: boolean) => !val && emit('close')">
+    <DialogPortal>
+      <div class="modal-root" v-if="inst">
+        <DialogOverlay class="modal-backdrop" />
+        <DialogContent class="modal-box profile-modal outline-none">
       <!-- Profile Header -->
       <div class="profile-header">
         <div class="profile-avatar">
@@ -450,15 +458,17 @@ function formatNumber(num: any) {
           <pre v-else class="logs-viewer">{{ logsText }}</pre>
         </div>
       </div>
-    </div>
-
-    <!-- Change Mod Version Modal -->
-    <ChangeModVersionModal
-      :show="changeVersionModalOpen"
-      :instance-id="inst?.id || ''"
-      :item="changeVersionItem"
-      @close="changeVersionModalOpen = false"
-      @version-changed="onModVersionChanged"
-    />
+    </DialogContent>
   </div>
+</DialogPortal>
+</DialogRoot>
+
+<!-- Change Mod Version Modal -->
+<ChangeModVersionModal
+  :show="changeVersionModalOpen"
+  :instance-id="inst?.id || ''"
+  :item="changeVersionItem"
+  @close="changeVersionModalOpen = false"
+  @version-changed="onModVersionChanged"
+/>
 </template>

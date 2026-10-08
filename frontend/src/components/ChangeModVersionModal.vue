@@ -5,6 +5,13 @@ import {toast} from '../store'
 import {GetModAvailableVersions, ChangeModVersion} from 'bindings/WaiLauncher/app'
 import {renderMarkdown, handleMarkdownClick} from '../utils/markdown'
 
+import {
+  DialogRoot,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+} from 'reka-ui'
+
 const props = defineProps<{
   show?: boolean
   instanceId: string
@@ -129,9 +136,11 @@ function getVersionInitial(type: any) {
 </script>
 
 <template>
-  <div class="modal-root" v-if="show">
-    <div class="modal-backdrop" @click="!downloading && emit('close')"></div>
-    <div class="modal-box mr-change-version-modal">
+  <DialogRoot :open="show" @update:open="(val: boolean) => !val && !downloading && emit('close')">
+    <DialogPortal>
+      <div class="modal-root">
+        <DialogOverlay class="modal-backdrop" />
+        <DialogContent class="modal-box mr-change-version-modal outline-none">
       <!-- Modal Header -->
       <div class="mr-cv-header">
         <div class="mr-cv-header-left">
@@ -322,6 +331,8 @@ function getVersionInitial(type: any) {
           </button>
         </div>
       </div>
-    </div>
+    </DialogContent>
   </div>
+</DialogPortal>
+</DialogRoot>
 </template>
