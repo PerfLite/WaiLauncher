@@ -14,6 +14,7 @@
     "@fontsource/rubik": "^5.3.0",
     "@wailsio/runtime": "^3.0.0-beta.28",
     "marked": "^18.0.11",
+    "pinia": "^4.0.3",
     "skinview3d": "^3.4.2",
     "vue": "^3.5.0"
   },
