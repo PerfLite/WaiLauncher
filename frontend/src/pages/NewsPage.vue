@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import {ref, computed, onMounted, onUnmounted} from 'vue'
+import {ref, computed} from 'vue'
+import {onKeyStroke} from '@vueuse/core'
 import {store, toast} from '@/store'
 import {t} from '@/i18n'
 import {GetArticle, TranslateArticle, OpenURL} from 'bindings/WaiLauncher/app'
@@ -42,18 +43,10 @@ function closeArticle() {
   translating.value = false
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && activeUrl.value && store.page === 'news') {
+onKeyStroke('Escape', () => {
+  if (activeUrl.value && store.page === 'news') {
     closeArticle()
   }
-}
-
-onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
 })
 
 async function toggleTranslate() {

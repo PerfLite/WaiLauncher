@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import {computed, onMounted, onUnmounted, ref, watch} from 'vue'
+import {computed, onMounted, ref, watch} from 'vue'
+import {useEventListener, useDebounceFn} from '@vueuse/core'
 import {store, toast} from '@/store'
 import {t} from '@/i18n'
 import {
@@ -96,9 +97,10 @@ function onKeydown(e: KeyboardEvent) {
   else if (e.key === 'ArrowLeft') prevGalleryImg()
 }
 
+useEventListener(window, 'keydown', onKeydown)
+useEventListener(window, 'mods-reset-view', backToCatalog)
+
 onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
-  window.addEventListener('mods-reset-view', backToCatalog)
   search()
   onEvent('modpack-progress', (p: any) => {
     installProgress.value = p
@@ -114,18 +116,9 @@ onMounted(() => {
   })
 })
 
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('mods-reset-view', backToCatalog)
-})
-
-let searchTimer: any = null
-function onSearchInput() {
-  clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    search()
-  }, 400)
-}
+const onSearchInput = useDebounceFn(() => {
+  search()
+}, 400)
 
 watch([source, selectedVersion, selectedLoader], () => {
   search()

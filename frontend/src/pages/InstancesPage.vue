@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, watch, computed, onMounted, nextTick} from 'vue'
+import {useClipboard, onKeyStroke} from '@vueuse/core'
 import {store, toast} from '@/store'
 import {t} from '@/i18n'
 import {
@@ -575,8 +576,8 @@ onMounted(() => {
   })
 
   // Ctrl+F opens log search when viewing the logs tab
-  window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && currentTab.value === 'logs') {
+  onKeyStroke(['f', 'F'], (e) => {
+    if ((e.ctrlKey || e.metaKey) && currentTab.value === 'logs') {
       e.preventDefault()
       logSearchOpen.value = true
     }
@@ -611,11 +612,14 @@ async function loadLogs() {
   }
 }
 
-function copyLogs() {
+const {copy: copyToClipboard} = useClipboard()
+
+async function copyLogs() {
   if (!logsText.value) return
-  navigator.clipboard.writeText(logsText.value).then(() => {
+  try {
+    await copyToClipboard(logsText.value)
     toast(t('profile.logsCopied'))
-  }).catch(() => {})
+  } catch {}
 }
 
 function toggleLogSearch() {

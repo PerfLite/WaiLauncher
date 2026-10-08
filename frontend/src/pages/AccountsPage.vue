@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, computed, watch, onMounted, nextTick} from 'vue'
+import {useClipboard} from '@vueuse/core'
 import {store, activeAccount, getAccountAvatar, reloadAccounts, switchActiveAccount, deleteAccount, toast} from '@/store'
 import {t} from '@/i18n'
 import {
@@ -50,6 +51,7 @@ const targetCapeUrl = computed(() => {
 })
 
 // Auto-refresh Microsoft account profile capes on mount or selection
+const {copy: copyToClipboard} = useClipboard()
 const refreshingCapes = ref(false)
 async function refreshActiveCapes() {
   if (!targetAcc.value || targetAcc.value.type !== 'microsoft' || refreshingCapes.value) return
@@ -333,10 +335,8 @@ async function startMsAuth() {
     msCodeData.value = resp
 
     try {
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(resp.userCode)
-        codeCopied.value = true
-      }
+      await copyToClipboard(resp.userCode)
+      codeCopied.value = true
     } catch (_) {}
 
     pollMsAuth(resp.deviceCode, resp.interval || 5)
@@ -373,7 +373,7 @@ async function pollMsAuth(deviceCode: string, interval: number) {
 async function copyUserCode() {
   if (msCodeData.value?.userCode) {
     try {
-      await navigator.clipboard.writeText(msCodeData.value.userCode)
+      await copyToClipboard(msCodeData.value.userCode)
       codeCopied.value = true
       toast(t('accounts.ms.copied'))
       setTimeout(() => { codeCopied.value = false }, 2500)

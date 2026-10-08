@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, watch, computed} from 'vue'
+import {useClipboard} from '@vueuse/core'
 import {t} from '../i18n'
 import {toast} from '../store'
 import ChangeModVersionModal from './ChangeModVersionModal.vue'
@@ -219,11 +220,14 @@ async function loadLogs() {
   }
 }
 
-function copyLogs() {
+const {copy: copyToClipboard} = useClipboard()
+
+async function copyLogs() {
   if (!logsText.value) return
-  navigator.clipboard.writeText(logsText.value).then(() => {
+  try {
+    await copyToClipboard(logsText.value)
     toast(t('profile.logsCopied'))
-  }).catch(() => {})
+  } catch {}
 }
 
 function openFolder() {

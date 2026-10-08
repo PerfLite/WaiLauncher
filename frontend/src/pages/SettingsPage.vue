@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, computed, watch, onMounted} from 'vue'
+import {useDebounceFn} from '@vueuse/core'
 import {store, toast, reloadNews, activeAccount, getAccountAvatar} from '@/store'
 import {t, setLang} from '@/i18n'
 import {
@@ -152,12 +153,12 @@ function pickLang(l: string) {
 
 // Autosave: persist any settings change (toggles, fields) with a small
 // debounce so nothing is lost even without clicking "Save".
-let autosaveTimer: any = null
+const debouncedSave = useDebounceFn(() => {
+  SaveSettings(store.settings as any).catch(() => {})
+}, 400)
+
 watch(() => store.settings, () => {
-  clearTimeout(autosaveTimer)
-  autosaveTimer = setTimeout(() => {
-    SaveSettings(store.settings as any).catch(() => {})
-  }, 400)
+  debouncedSave()
 }, {deep: true})
 
 async function save() {
