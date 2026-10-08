@@ -1,3 +1,4 @@
+<script setup lang="ts">
 import {ref, watch, computed} from 'vue'
 import {t} from '../i18n'
 import {toast} from '../store'
@@ -12,34 +13,37 @@ import {
   InstallCurseForgeMod,
   GetInstanceLogs,
   OpenInstanceDir
-} from '../../wailsjs/go/main/App'
+} from 'bindings/WaiLauncher/app'
 
-const props = defineProps({
-  inst: {type: Object, default: null},
-  open: {type: Boolean, default: false}
-})
+const props = defineProps<{
+  inst?: any
+  open?: boolean
+}>()
 
-const emit = defineEmits(['close', 'play'])
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'play', inst: any): void
+}>()
 
-const tab = ref('mods') // 'mods' | 'catalog' | 'logs'
-const catalogSource = ref('modrinth') // 'modrinth' | 'curseforge'
-const installedMods = ref([])
+const tab = ref<'mods' | 'catalog' | 'logs'>('mods')
+const catalogSource = ref<'modrinth' | 'curseforge'>('modrinth')
+const installedMods = ref<any[]>([])
 const loadingMods = ref(false)
 
 const modQuery = ref('')
 const catalogQuery = ref('')
-const catalogResults = ref([])
+const catalogResults = ref<any[]>([])
 const loadingCatalog = ref(false)
-const installingMap = ref({})
+const installingMap = ref<Record<string, any>>({})
 
 const logsText = ref('')
 const loadingLogs = ref(false)
 
 /* Change Mod Version */
 const changeVersionModalOpen = ref(false)
-const changeVersionItem = ref(null)
+const changeVersionItem = ref<any>(null)
 
-function openChangeVersion(m) {
+function openChangeVersion(m: any) {
   changeVersionItem.value = m
   changeVersionModalOpen.value = true
 }
@@ -91,7 +95,7 @@ async function loadMods() {
   }
 }
 
-async function onToggleMod(m) {
+async function onToggleMod(m: any) {
   if (!props.inst) return
   const targetState = !m.enabled
   try {
@@ -102,23 +106,23 @@ async function onToggleMod(m) {
     } else if (!m.filename.endsWith('.disabled')) {
       m.filename += '.disabled'
     }
-  } catch (e) {
+  } catch (e: any) {
     toast(t('inst.err') + e, true)
   }
 }
 
-async function onDeleteMod(m) {
+async function onDeleteMod(m: any) {
   if (!props.inst) return
   try {
     await DeleteMod(props.inst.id, m.filename)
     installedMods.value = installedMods.value.filter(item => item.filename !== m.filename)
     toast(t('mods.removed').replace('{m}', m.name))
-  } catch (e) {
+  } catch (e: any) {
     toast(t('inst.err') + e, true)
   }
 }
 
-let catalogTimer = null
+let catalogTimer: any = null
 function onCatalogInput() {
   clearTimeout(catalogTimer)
   catalogTimer = setTimeout(() => {
@@ -165,21 +169,21 @@ async function searchCatalog() {
   }
 }
 
-function isModInstalled(hit) {
+function isModInstalled(hit: any) {
   const title = (hit.title || '').toLowerCase().replace(/[^a-z0-9]/g, '')
   const slug = (hit.slug || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-  return installedMods.value.some(m => {
+  return installedMods.value.some((m: any) => {
     const clean = m.name.toLowerCase().replace(/[^a-z0-9]/g, '')
     return (title && clean.includes(title)) || (slug && clean.includes(slug))
   })
 }
 
-async function installMod(hit) {
+async function installMod(hit: any) {
   if (!props.inst) return
   const id = hit.project_id || hit.slug
   installingMap.value[id] = true
   try {
-    let mod
+    let mod: any
     if (catalogSource.value === 'curseforge') {
       mod = await InstallCurseForgeMod(props.inst.id, id, 'mod')
     } else {
@@ -189,7 +193,7 @@ async function installMod(hit) {
       installedMods.value.push(mod)
       toast(t('mods.added').replace('{m}', hit.title))
     }
-  } catch (e) {
+  } catch (e: any) {
     toast(t('inst.err') + e, true)
   } finally {
     installingMap.value[id] = false
@@ -222,7 +226,7 @@ function openFolder() {
   }
 }
 
-function formatBytes(bytes) {
+function formatBytes(bytes: any) {
   if (!bytes) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
@@ -230,10 +234,11 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-function formatNumber(num) {
+function formatNumber(num: any) {
   if (!num) return '0'
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+  const n = Number(num)
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
   return String(num)
 }
 </script>

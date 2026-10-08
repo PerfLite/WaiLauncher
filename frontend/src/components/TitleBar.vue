@@ -1,9 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import {computed} from 'vue'
-import {store} from '../store'
-import {t} from '../i18n'
-import {WindowMinimize, WindowToggleMaximize, WindowClose} from '../../wailsjs/go/main/App'
-import logoImg from '../assets/logo.png'
+import {store} from '@/store'
+import {t} from '@/i18n'
+import {WindowMinimize, WindowToggleMaximize, WindowClose} from 'bindings/WaiLauncher/app'
+import logoImg from '@/assets/logo.png'
 
 const hasUpdate = computed(() => {
   const u = store.launcherUpdate

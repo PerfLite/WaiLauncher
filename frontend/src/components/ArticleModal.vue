@@ -1,13 +1,13 @@
-<script setup>
+<script setup lang="ts">
 import {ref, watch, computed, onMounted, onUnmounted} from 'vue'
 import {store, toast} from '../store'
 import {t} from '../i18n'
-import {GetArticle, TranslateArticle, OpenURL} from '../../wailsjs/go/main/App'
+import {GetArticle, TranslateArticle, OpenURL} from 'bindings/WaiLauncher/app'
 
 const loading = ref(false)
 const translating = ref(false)
 const isTranslated = ref(false)
-const article = ref(null)
+const article = ref<any>(null)
 const error = ref('')
 
 watch(() => store.activeArticleUrl, async (url) => {
@@ -34,7 +34,7 @@ function close() {
   store.activeArticleUrl = ''
 }
 
-function onKeydown(e) {
+function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && store.activeArticleUrl) {
     close()
   }

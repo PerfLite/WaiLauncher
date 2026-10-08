@@ -1,10 +1,64 @@
 import {reactive} from 'vue'
-import {GetNews, GetAccounts, SelectAccount, RemoveAccount} from '../wailsjs/go/main/App'
+import {GetNews, GetAccounts, SelectAccount, RemoveAccount} from 'bindings/WaiLauncher/app'
+import type { Account } from 'bindings/WaiLauncher/internal/launcher/auth/models'
+import type { Instance } from 'bindings/WaiLauncher/models'
 import skinImg from './assets/skin.png'
+
+export interface ToastItem {
+  id: number
+  text: string
+  gold: boolean
+  out: boolean
+}
+
+export interface StoreState {
+  page: string
+  maximized: boolean
+  ready: boolean
+  launcherVer: string
+  dataDir: string
+  versionsErr: string
+  settings: Record<string, any>
+  accounts: Account[]
+  activeAccountId: string
+  accountsModalOpen: boolean
+  versions: any[]
+  latestRelease: string
+  latestSnapshot: string
+  launch: {
+    state: string
+    stage: string
+    percent: number
+    message: string
+  }
+  toasts: ToastItem[]
+  news: any[]
+  newsLoaded: boolean
+  activeArticleUrl: string
+  instances: Instance[]
+  selectedInstanceId: string
+  createInstanceModalOpen: boolean
+  aboutModalOpen: boolean
+  mods: Record<string, boolean>
+  launcherUpdate: {
+    info: any
+    modalOpen: boolean
+    downloading: boolean
+    percent: number
+    message: string
+    restarting: boolean
+    error: string
+  }
+  modpackUpdates: Record<string, any>
+  gameLog: {
+    running: boolean
+    lines: string[]
+  }
+}
 
 let toastId = 0
 
-export const store = reactive({
+export const store: StoreState = reactive({
   page: 'home',
   maximized: false,
   ready: false,
@@ -60,7 +114,7 @@ export function activeAccount() {
   return found || store.accounts[0]
 }
 
-export function getAccountAvatar(acc) {
+export function getAccountAvatar(acc?: Account | any) {
   if (!acc) return skinImg
   if (acc.avatarUrl) return acc.avatarUrl
   if (acc.uuid) return `https://mc-heads.net/avatar/${acc.uuid}/64`
@@ -72,7 +126,7 @@ export async function reloadAccounts() {
   try {
     const data = await GetAccounts()
     if (data) {
-      store.accounts = data.accounts || []
+      store.accounts = (data.accounts || []) as Account[]
       store.activeAccountId = data.activeId || (store.accounts[0] ? store.accounts[0].id : '')
       const act = activeAccount()
       if (act && act.username) {
@@ -84,7 +138,7 @@ export async function reloadAccounts() {
   }
 }
 
-export async function switchActiveAccount(id) {
+export async function switchActiveAccount(id: string) {
   try {
     const acc = await SelectAccount(id)
     if (acc) {
@@ -98,7 +152,7 @@ export async function switchActiveAccount(id) {
   }
 }
 
-export async function deleteAccount(id) {
+export async function deleteAccount(id: string) {
   try {
     await RemoveAccount(id)
     await reloadAccounts()
@@ -107,7 +161,7 @@ export async function deleteAccount(id) {
   }
 }
 
-export function toast(text, gold = false) {
+export function toast(text: string, gold = false) {
   const id = ++toastId
   store.toasts.push({id, text, gold, out: false})
   setTimeout(() => {

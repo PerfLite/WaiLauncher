@@ -67,53 +67,40 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { SkinViewer, WalkingAnimation, RunningAnimation, FlyingAnimation, IdleAnimation } from 'skinview3d'
 
-const props = defineProps({
-  skinUrl: {
-    type: String,
-    default: ''
-  },
-  capeUrl: {
-    type: String,
-    default: ''
-  },
-  model: {
-    type: String,
-    default: 'auto' // 'auto' | 'default' | 'slim'
-  },
-  width: {
-    type: Number,
-    default: 260
-  },
-  height: {
-    type: Number,
-    default: 340
-  },
-  animation: {
-    type: String,
-    default: 'walk' // 'walk' | 'run' | 'idle' | 'fly' | 'none'
-  },
-  showControls: {
-    type: Boolean,
-    default: true
-  },
-  autoRotate: {
-    type: Boolean,
-    default: false
-  }
+interface Props {
+  skinUrl?: string
+  capeUrl?: string
+  model?: string
+  width?: number
+  height?: number
+  animation?: string
+  showControls?: boolean
+  autoRotate?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  skinUrl: '',
+  capeUrl: '',
+  model: 'auto',
+  width: 260,
+  height: 340,
+  animation: 'walk',
+  showControls: true,
+  autoRotate: false
 })
 
-const canvasRef = ref(null)
+const canvasRef = ref<HTMLCanvasElement | null>(null)
 const loading = ref(false)
 const isRotating = ref(props.autoRotate)
 const currentAnim = ref(props.animation)
 
-let viewer = null
+let viewer: any = null
 
-function applyAnimation(type) {
+function applyAnimation(type: string) {
   if (!viewer) return
   if (type === 'walk') {
     viewer.animation = new WalkingAnimation()
@@ -131,7 +118,7 @@ function applyAnimation(type) {
   }
 }
 
-function setAnimation(type) {
+function setAnimation(type: string) {
   currentAnim.value = type
   applyAnimation(type)
 }

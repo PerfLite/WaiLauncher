@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {ref, watch} from 'vue'
 import {store} from '../store'
 import {t} from '../i18n'

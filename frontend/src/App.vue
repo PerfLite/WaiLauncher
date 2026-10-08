@@ -1,24 +1,24 @@
-<script setup>
+<script setup lang="ts">
 import {onMounted, watch} from 'vue'
-import {store, toast, reloadAccounts} from './store'
-import {t, setLang} from './i18n'
-import TitleBar from './components/TitleBar.vue'
-import SideBar from './components/SideBar.vue'
-import Toasts from './components/Toasts.vue'
-import LaunchOverlay from './components/LaunchOverlay.vue'
-import UpdateModal from './components/UpdateModal.vue'
-import CreateInstanceModal from './components/CreateInstanceModal.vue'
-import AboutModal from './components/AboutModal.vue'
-import HomePage from './pages/HomePage.vue'
-import InstancesPage from './pages/InstancesPage.vue'
-import NewsPage from './pages/NewsPage.vue'
-import ModsPage from './pages/ModsPage.vue'
-import SettingsPage from './pages/SettingsPage.vue'
-import AccountsPage from './pages/AccountsPage.vue'
-import {GetState, RefreshVersions, GetNews, CheckLauncherUpdate, CheckInstanceModpackUpdate} from '../wailsjs/go/main/App'
-import {EventsOn} from '../wailsjs/runtime/runtime'
+import {store, toast, reloadAccounts} from '@/store'
+import {t, setLang} from '@/i18n'
+import TitleBar from '@/components/TitleBar.vue'
+import SideBar from '@/components/SideBar.vue'
+import Toasts from '@/components/Toasts.vue'
+import LaunchOverlay from '@/components/LaunchOverlay.vue'
+import UpdateModal from '@/components/UpdateModal.vue'
+import CreateInstanceModal from '@/components/CreateInstanceModal.vue'
+import AboutModal from '@/components/AboutModal.vue'
+import HomePage from '@/pages/HomePage.vue'
+import InstancesPage from '@/pages/InstancesPage.vue'
+import NewsPage from '@/pages/NewsPage.vue'
+import ModsPage from '@/pages/ModsPage.vue'
+import SettingsPage from '@/pages/SettingsPage.vue'
+import AccountsPage from '@/pages/AccountsPage.vue'
+import {GetState, RefreshVersions, GetNews, CheckLauncherUpdate, CheckInstanceModpackUpdate} from 'bindings/WaiLauncher/app'
+import {onEvent} from '@/utils/wailsEvents'
 
-function applyState(st) {
+function applyState(st: any) {
   if (!st) return
   if (st.settings) store.settings = st.settings
   setLang(store.settings.language)
@@ -56,7 +56,7 @@ onMounted(async () => {
     store.latestRelease = '1.21.4'
     store.settings.selectedVersion = '1.21.4'
     store.accounts = [
-      {id: 'demo-1', type: 'offline', username: 'Player', uuid: '00000000-0000-0000-0000-000000000000'},
+      {id: 'demo-1', type: 'offline' as any, username: 'Player', uuid: '00000000-0000-0000-0000-000000000000', createdAt: new Date(), lastUsed: new Date()},
     ]
     store.activeAccountId = 'demo-1'
   }
@@ -66,7 +66,7 @@ onMounted(async () => {
   }).catch(() => {
     store.newsLoaded = true
   })
-  EventsOn('launch', (ev) => {
+  onEvent('launch', (ev: any) => {
     const prev = store.launch.state
     store.launch = ev
     if (ev.state === 'playing' && prev !== 'playing') {
@@ -78,17 +78,17 @@ onMounted(async () => {
     }
   })
 
-  EventsOn('update-progress', (ev) => {
+  onEvent('update-progress', (ev: any) => {
     if (!ev) return
     store.launcherUpdate.percent = ev.percent || 0
     store.launcherUpdate.message = ev.message || ''
   })
-  EventsOn('update-error', (msg) => {
+  onEvent('update-error', (msg: string) => {
     store.launcherUpdate.downloading = false
     store.launcherUpdate.error = msg || 'update error'
     toast((t('update.checkErr') || 'Update error: ') + msg, true)
   })
-  EventsOn('update-done', () => {
+  onEvent('update-done', () => {
     store.launcherUpdate.downloading = false
     store.launcherUpdate.restarting = true
   })
@@ -132,14 +132,14 @@ onMounted(async () => {
     checkAllModpackUpdates()
   }, 1000)
 
-  EventsOn('instances-updated', (list) => {
+  onEvent('instances-updated', (list: any) => {
     if (Array.isArray(list)) {
       store.instances = list
       checkAllModpackUpdates()
     }
   })
 
-  EventsOn('open-about-modal', () => {
+  onEvent('open-about-modal', () => {
     store.aboutModalOpen = true
   })
 })

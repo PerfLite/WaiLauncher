@@ -1,8 +1,8 @@
-<script setup>
+<script setup lang="ts">
 import {computed, ref, watch} from 'vue'
 import {store, activeAccount, getAccountAvatar} from '../store'
 import {t} from '../i18n'
-import {SetActiveInstance} from '../../wailsjs/go/main/App'
+import {SetActiveInstance} from 'bindings/WaiLauncher/app'
 import skinFallback from '../assets/skin.png'
 
 const instancesExpanded = ref(true)
@@ -16,7 +16,7 @@ watch(() => store.page, (page) => {
 const currentAcc = computed(() => activeAccount())
 const avatarUrl = computed(() => getAccountAvatar(currentAcc.value))
 
-function fmtDur(sec) {
+function fmtDur(sec?: number) {
   if (!sec || sec <= 0) return '0 ч'
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
@@ -30,17 +30,17 @@ const totalPlayTime = computed(() => {
   const day = new Date()
   const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
   for (const ins of store.instances) {
-    total += ins.playTime || 0
-    if (ins.lastPlayDay === key) today += ins.playTimeToday || 0
+    total += (ins as any).playTime || 0
+    if ((ins as any).lastPlayDay === key) today += (ins as any).playTimeToday || 0
   }
   return {total, today}
 })
 
-function onAvatarError(e) {
-  e.target.src = skinFallback
+function onAvatarError(e: Event) {
+  (e.target as HTMLImageElement).src = skinFallback
 }
 
-function onNavClick(item) {
+function onNavClick(item: { id: string }) {
   if (item.id === 'instances') {
     if (store.page === 'instances') {
       instancesExpanded.value = !instancesExpanded.value
@@ -58,7 +58,7 @@ function onNavClick(item) {
   }
 }
 
-async function selectInstance(inst) {
+async function selectInstance(inst: any) {
   store.selectedInstanceId = inst.id
   store.page = 'instances'
   if (inst.id !== store.settings.activeInstance) {

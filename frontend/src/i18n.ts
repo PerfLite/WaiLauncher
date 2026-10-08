@@ -1,24 +1,24 @@
 import {reactive} from 'vue'
 
 // i18n is the reactive UI language state; t() resolves keys for it.
-export const i18n = reactive({lang: 'ru'})
+export const i18n = reactive<{ lang: string }>({ lang: 'ru' })
 
-export function setLang(l) {
+export function setLang(l: string): void {
   i18n.lang = l === 'en' ? 'en' : 'ru'
 }
 
-export function t(key, params = {}) {
+export function t(key: string, params: Record<string, any> = {}): string {
   const d = dicts[i18n.lang] || dicts.ru
-  let s = d[key] ?? dicts.ru[key] ?? key
+  let s: string = d[key] ?? dicts.ru[key] ?? key
   if (params && typeof params === 'object') {
     for (const [k, v] of Object.entries(params)) {
-      s = s.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
+      s = s.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
     }
   }
   return s
 }
 
-const dicts = {
+const dicts: Record<string, Record<string, string>> = {
   ru: {
     'nav.menu': 'Меню',
     'nav.home': 'Главная',

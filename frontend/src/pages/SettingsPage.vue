@@ -1,11 +1,15 @@
-<script setup>
+<script setup lang="ts">
 import {ref, computed, watch, onMounted} from 'vue'
-import {store, toast, reloadNews, activeAccount, getAccountAvatar} from '../store'
-import {t, setLang} from '../i18n'
-import {SaveSettings, GetSettings, PickJavaPath, PickDataDir, OpenDataDir, OpenLogsFolder, OpenURL, GetJavaRuntimesStatus, InstallJavaRuntime, UninstallJavaRuntime, CheckLauncherUpdate, CheckJavaUpdates, GetCacheInfo, ClearCache} from '../../wailsjs/go/main/App'
-import {EventsOn} from '../../wailsjs/runtime/runtime'
-import skinFallback from '../assets/skin.png'
-import logoImg from '../assets/logo.png'
+import {store, toast, reloadNews, activeAccount, getAccountAvatar} from '@/store'
+import {t, setLang} from '@/i18n'
+import {
+  SaveSettings, GetSettings, PickJavaPath, PickDataDir, OpenDataDir, OpenLogsFolder,
+  OpenURL, GetJavaRuntimesStatus, InstallJavaRuntime, UninstallJavaRuntime,
+  CheckLauncherUpdate, CheckJavaUpdates, GetCacheInfo, ClearCache
+} from 'bindings/WaiLauncher/app'
+import {onEvent} from '@/utils/wailsEvents'
+import skinFallback from '@/assets/skin.png'
+import logoImg from '@/assets/logo.png'
 
 const resolutions = ['1280 × 720', '1600 × 900', '1920 × 1080', '2560 × 1440', '3840 × 2160']
 
@@ -19,13 +23,13 @@ const ramGb = computed({
 
 
 /* Java Runtimes */
-const javaRuntimes = ref([])
+const javaRuntimes = ref<any[]>([])
 const loadingJavaRuntimes = ref(false)
-const installingJavaMap = ref({})
-const javaProgress = ref({})
-const javaToDelete = ref(null)
+const installingJavaMap = ref<Record<string | number, boolean>>({})
+const javaProgress = ref<Record<string | number, number>>({})
+const javaToDelete = ref<any>(null)
 const deletingJava = ref(false)
-const javaUpdates = ref({}) // major -> {installedVersion, latestVersion}
+const javaUpdates = ref<Record<string | number, any>>({}) // major -> {installedVersion, latestVersion}
 const checkingJavaUpdates = ref(false)
 
 async function loadJavaRuntimes() {
@@ -44,7 +48,7 @@ async function checkJavaUpdates() {
   checkingJavaUpdates.value = true
   try {
     const list = await CheckJavaUpdates()
-    const map = {}
+    const map: Record<string | number, any> = {}
     for (const u of (list || [])) {
       if (u.updateAvailable) map[u.major] = u
     }
@@ -61,7 +65,7 @@ async function checkJavaUpdates() {
   }
 }
 
-async function onUpdateJava(major) {
+async function onUpdateJava(major: any) {
   const upd = javaUpdates.value[major]
   if (!upd || installingJavaMap.value[major]) return
   delete javaUpdates.value[major]
@@ -71,21 +75,21 @@ async function onUpdateJava(major) {
     await InstallJavaRuntime(major)
     await loadJavaRuntimes()
     toast(t('settings.javaUpdateDone') || ('Java ' + major + ' обновлена'))
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   } finally {
     installingJavaMap.value[major] = false
   }
 }
 
-async function onInstallJava(major) {
+async function onInstallJava(major: any) {
   installingJavaMap.value[major] = true
   javaProgress.value[major] = 0
   try {
     await InstallJavaRuntime(major)
     await loadJavaRuntimes()
     toast(t('settings.javaInstalledSuccess'))
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   } finally {
     installingJavaMap.value[major] = false
@@ -93,7 +97,7 @@ async function onInstallJava(major) {
   }
 }
 
-function promptDeleteJava(runtime) {
+function promptDeleteJava(runtime: any) {
   javaToDelete.value = runtime
 }
 
@@ -115,7 +119,7 @@ async function confirmDeleteJava() {
 
 onMounted(() => {
   loadJavaRuntimes()
-  EventsOn('java-install-progress', (ev) => {
+  onEvent('java-install-progress', (ev: any) => {
     if (ev && ev.major) {
       javaProgress.value[ev.major] = Math.floor(ev.percent || 0)
     }
@@ -139,28 +143,28 @@ async function browseDataDir() {
   } catch (e) { /* preview mode */ }
 }
 
-function pickLang(l) {
+function pickLang(l: string) {
   store.settings.language = l
   setLang(l)
   // Persist first so the backend localizes re-fetched news (tags, dates).
-  SaveSettings(store.settings).then(reloadNews).catch(() => {})
+  SaveSettings(store.settings as any).then(reloadNews).catch(() => {})
 }
 
 // Autosave: persist any settings change (toggles, fields) with a small
 // debounce so nothing is lost even without clicking "Save".
-let autosaveTimer = null
+let autosaveTimer: any = null
 watch(() => store.settings, () => {
   clearTimeout(autosaveTimer)
   autosaveTimer = setTimeout(() => {
-    SaveSettings(store.settings).catch(() => {})
+    SaveSettings(store.settings as any).catch(() => {})
   }, 400)
 }, {deep: true})
 
 async function save() {
   try {
-    await SaveSettings(store.settings)
+    await SaveSettings(store.settings as any)
     toast(t('settings.saved'))
-  } catch (e) {
+  } catch (e: any) {
     toast(t('settings.saveErr') + e, true)
   }
 }
@@ -175,8 +179,9 @@ async function reset() {
   }
 }
 
-function onAvatarError(e) {
-  e.target.src = skinFallback
+function onAvatarError(e: Event) {
+  const target = e.target as HTMLImageElement
+  if (target) target.src = skinFallback
 }
 
 async function openLogs() {

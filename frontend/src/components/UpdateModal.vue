@@ -1,9 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import {computed} from 'vue'
-import {store, toast} from '../store'
-import {t} from '../i18n'
-import {DownloadLauncherUpdate, OpenURL} from '../../wailsjs/go/main/App'
-import {renderMarkdown, handleMarkdownClick} from '../utils/markdown'
+import {store, toast} from '@/store'
+import {t} from '@/i18n'
+import {DownloadLauncherUpdate, OpenURL} from 'bindings/WaiLauncher/app'
+import {renderMarkdown, handleMarkdownClick} from '@/utils/markdown'
 
 const up = computed(() => store.launcherUpdate)
 const info = computed(() => up.value.info)
@@ -21,9 +21,9 @@ async function install() {
   store.launcherUpdate.message = ''
   try {
     await DownloadLauncherUpdate()
-  } catch (e) {
+  } catch (e: any) {
     store.launcherUpdate.downloading = false
-    toast((t('inst.err') || 'Ошибка: ') + e, true)
+    toast((t('inst.err') || 'Ошибка: ') + (e?.message || e), true)
   }
 }
 
@@ -33,7 +33,7 @@ function openRelease() {
   }
 }
 
-function formatDate(s) {
+function formatDate(s?: string) {
   if (!s) return ''
   const d = new Date(s)
   if (isNaN(d.getTime())) return s

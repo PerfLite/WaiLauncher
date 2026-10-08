@@ -1,24 +1,24 @@
-<script setup>
+<script setup lang="ts">
 import {onMounted, onUnmounted} from 'vue'
 import {store} from '../store'
 import {t} from '../i18n'
-import {OpenURL} from '../../wailsjs/go/main/App'
+import {OpenURL} from 'bindings/WaiLauncher/app'
 
 function close() {
   store.aboutModalOpen = false
 }
 
-function openExternal(url) {
+function openExternal(url: string) {
   if (url) {
     try {
       OpenURL(url)
-    } catch (e) {
+    } catch {
       window.open(url, '_blank')
     }
   }
 }
 
-function onKeydown(e) {
+function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && store.aboutModalOpen) {
     close()
   }

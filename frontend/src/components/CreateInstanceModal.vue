@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {computed, onMounted, ref, watch} from 'vue'
 import {store, toast} from '../store'
 import {t} from '../i18n'
@@ -10,10 +10,10 @@ import {
   PickLauncherFolder,
   ScanCustomLauncherDir,
   ImportSelectedInstances
-} from '../../wailsjs/go/main/App'
-import {EventsOn} from '../../wailsjs/runtime/runtime'
+} from 'bindings/WaiLauncher/app'
+import {onEvent} from '@/utils/wailsEvents'
 
-const currentStep = ref('menu') // 'menu' | 'custom' | 'import_launchers'
+const currentStep = ref<'menu' | 'custom' | 'import_launchers'>('menu')
 const createSearch = ref('')
 const creating = ref(false)
 const importingInst = ref(false)
@@ -21,17 +21,17 @@ const newName = ref('')
 const newVersion = ref('')
 const newLoader = ref('vanilla')
 const verQuery = ref('')
-const loaderVerList = ref([])
+const loaderVerList = ref<any[]>([])
 const loaderVer = ref('')
 const loaderVerLoading = ref(false)
 const loaderVerErr = ref(false)
 
 /* Launcher Import state */
-const detectedLaunchers = ref([])
+const detectedLaunchers = ref<any[]>([])
 const loadingLaunchers = ref(false)
 const importSearch = ref('')
-const selectedInstPaths = ref([])
-const expandedLaunchers = ref({})
+const selectedInstPaths = ref<string[]>([])
+const expandedLaunchers = ref<Record<string, boolean>>({})
 const importingSelected = ref(false)
 const importProgress = ref({
   instance: '',
@@ -48,7 +48,7 @@ const loaders = [
   {id: 'neoforge'},
 ]
 
-const typeNames = computed(() => ({
+const typeNames = computed<Record<string, string>>(() => ({
   release: t('type.release'),
   snapshot: t('type.snapshot'),
   old_beta: t('type.old_beta'),
@@ -70,7 +70,7 @@ const filteredLaunchers = computed(() => {
 
   const result = []
   for (const l of detectedLaunchers.value) {
-    const matchingInsts = (l.instances || []).filter(inst => {
+    const matchingInsts = (l.instances || []).filter((inst: any) => {
       return (inst.name || '').toLowerCase().includes(q) ||
              (inst.versionId || '').toLowerCase().includes(q) ||
              (inst.loader || '').toLowerCase().includes(q)
@@ -86,7 +86,7 @@ const filteredLaunchers = computed(() => {
 })
 
 onMounted(() => {
-  EventsOn('import-progress', (data) => {
+  onEvent('import-progress', (data: any) => {
     if (data) {
       importProgress.value = {
         instance: data.instance || importProgress.value.instance,
@@ -151,16 +151,16 @@ async function onAddLauncherPath() {
   }
 }
 
-function isLauncherAllSelected(launcher) {
+function isLauncherAllSelected(launcher: any) {
   if (!launcher.instances || !launcher.instances.length) return false
-  return launcher.instances.every(i => selectedInstPaths.value.includes(i.path))
+  return launcher.instances.every((i: any) => selectedInstPaths.value.includes(i.path))
 }
 
-function toggleLauncherSelectAll(launcher) {
+function toggleLauncherSelectAll(launcher: any) {
   if (!launcher.instances || !launcher.instances.length) return
   const allSel = isLauncherAllSelected(launcher)
   if (allSel) {
-    selectedInstPaths.value = selectedInstPaths.value.filter(p => !launcher.instances.some(i => i.path === p))
+    selectedInstPaths.value = selectedInstPaths.value.filter(p => !launcher.instances.some((i: any) => i.path === p))
   } else {
     for (const inst of launcher.instances) {
       if (!selectedInstPaths.value.includes(inst.path)) {
@@ -189,11 +189,15 @@ async function doImportSelected() {
       
       // Update local reactive store immediately
       for (const ins of imported) {
-        store.instances = [...store.instances.filter(i => i.id !== ins.id), ins]
+        if (ins) {
+          store.instances = [...store.instances.filter(i => i.id !== ins.id), ins]
+        }
       }
       const last = imported[imported.length - 1]
-      store.settings.activeInstance = last.id
-      store.settings.selectedVersion = last.versionId
+      if (last) {
+        store.settings.activeInstance = last.id
+        store.settings.selectedVersion = last.versionId
+      }
 
       setTimeout(() => {
         store.page = 'home'
@@ -205,13 +209,13 @@ async function doImportSelected() {
       toast(t('inst.err') + ' Не удалось импортировать сборки', true)
       importingSelected.value = false
     }
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
     importingSelected.value = false
   }
 }
 
-async function fetchLoaderVersions(loader, mcVer) {
+async function fetchLoaderVersions(loader: string, mcVer: string) {
   if (loader === 'vanilla' || !mcVer) {
     loaderVerList.value = []
     loaderVer.value = ''

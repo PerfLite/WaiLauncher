@@ -1,25 +1,28 @@
-<script setup>
+<script setup lang="ts">
 import {ref, watch, computed} from 'vue'
 import {t} from '../i18n'
 import {toast} from '../store'
-import {GetModAvailableVersions, ChangeModVersion} from '../../wailsjs/go/main/App'
+import {GetModAvailableVersions, ChangeModVersion} from 'bindings/WaiLauncher/app'
 import {renderMarkdown, handleMarkdownClick} from '../utils/markdown'
 
-const props = defineProps({
-  show: {type: Boolean, default: false},
-  instanceId: {type: String, required: true},
-  item: {type: Object, default: null}
-})
+const props = defineProps<{
+  show?: boolean
+  instanceId: string
+  item?: any
+}>()
 
-const emit = defineEmits(['close', 'version-changed'])
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'version-changed', val: { oldFilename: string; item: any }): void
+}>()
 
 const loading = ref(false)
 const error = ref('')
-const changeInfo = ref(null)
+const changeInfo = ref<any>(null)
 const downloading = ref(false)
 const searchQuery = ref('')
 const showIncompatible = ref(false)
-const selectedVer = ref(null)
+const selectedVer = ref<any>(null)
 
 watch(() => props.show, async (isOpen) => {
   if (isOpen && props.item) {
@@ -65,15 +68,15 @@ const displayedVersions = computed(() => {
   if (!changeInfo.value || !changeInfo.value.versions) return []
   let list = changeInfo.value.versions
   if (!showIncompatible.value) {
-    list = list.filter(v => v.isCompatible)
+    list = list.filter((v: any) => v.isCompatible)
   }
   const q = searchQuery.value.trim().toLowerCase()
   if (q) {
-    list = list.filter(v =>
+    list = list.filter((v: any) =>
       (v.name && v.name.toLowerCase().includes(q)) ||
       (v.versionNumber && v.versionNumber.toLowerCase().includes(q)) ||
       (v.filename && v.filename.toLowerCase().includes(q)) ||
-      (v.gameVersions && v.gameVersions.some(gv => gv.toLowerCase().includes(q)))
+      (v.gameVersions && v.gameVersions.some((gv: any) => gv.toLowerCase().includes(q)))
     )
   }
   return list
@@ -100,14 +103,14 @@ async function doChangeVersion() {
       item: updated
     })
     emit('close')
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка смены версии: ') + e, true)
   } finally {
     downloading.value = false
   }
 }
 
-function formatDate(dateStr) {
+function formatDate(dateStr: any) {
   if (!dateStr) return ''
   try {
     const d = new Date(dateStr)
@@ -117,7 +120,7 @@ function formatDate(dateStr) {
   }
 }
 
-function getVersionInitial(type) {
+function getVersionInitial(type: any) {
   const t = (type || 'release').toLowerCase()
   if (t === 'beta') return 'B'
   if (t === 'alpha') return 'A'

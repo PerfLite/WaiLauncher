@@ -1,17 +1,18 @@
-<script setup>
+<script setup lang="ts">
 import {computed, onMounted, ref} from 'vue'
-import {store, toast} from '../store'
+import {store, toast} from '@/store'
 import {
   Play, CancelPlay, StopGame,
   SetActiveInstance, DeleteInstance,
   OpenInstanceDir, UpdateInstanceGroup, ReorderInstances,
   CreateGroup, RenameGroup, DeleteGroup,
   CheckInstanceModpackUpdate
-} from '../../wailsjs/go/main/App'
-import {t} from '../i18n'
-import heroBg from '../assets/hero-bg.png'
+} from 'bindings/WaiLauncher/app'
+import type { Instance } from 'bindings/WaiLauncher/models'
+import {t} from '@/i18n'
+import heroBg from '@/assets/hero-bg.png'
 
-const stageNames = computed(() => ({
+const stageNames = computed<Record<string, string>>(() => ({
   manifest: t('stage.manifest'),
   client: t('stage.client'),
   libraries: t('stage.libraries'),
@@ -21,7 +22,7 @@ const stageNames = computed(() => ({
   assets: t('stage.assets'),
   start: t('stage.start'),
 }))
-const typeNames = computed(() => ({
+const typeNames = computed<Record<string, string>>(() => ({
   release: t('type.release'),
   snapshot: t('type.snapshot'),
   old_beta: t('type.old_beta'),
@@ -30,27 +31,27 @@ const typeNames = computed(() => ({
 
 /* ---- builds (instances) ---- */
 const hasInstances = computed(() => store.instances.length > 0)
-const activeInst = computed(() =>
+const activeInst = computed<Instance | null>(() =>
   store.instances.find(i => i.id === store.settings.activeInstance) || store.instances[0] || null
 )
 
 const ddOpen = ref(false)
 const searchQuery = ref('')
 const activeFilter = ref('all')
-const collapsedGroups = ref({})
+const collapsedGroups = ref<Record<string, boolean>>({})
 
 /* Folder Modal State */
 const folderModalOpen = ref(false)
-const folderModalMode = ref('create') // 'create' | 'rename'
+const folderModalMode = ref<'create' | 'rename'>('create')
 const folderModalName = ref('')
 const folderModalOldName = ref('')
-const folderModalSelectedInsts = ref([])
-const folderToDelete = ref(null)
+const folderModalSelectedInsts = ref<string[]>([])
+const folderToDelete = ref<string | null>(null)
 
 /* Drag and drop state */
-const draggedInst = ref(null)
-const dragOverCardId = ref(null)
-const dragOverGroupName = ref(null)
+const draggedInst = ref<Instance | null>(null)
+const dragOverCardId = ref<string | null>(null)
+const dragOverGroupName = ref<string | null>(null)
 
 const launch = computed(() => store.launch)
 const isWorking = computed(() => launch.value.state === 'working')
@@ -101,8 +102,8 @@ const filteredInstances = computed(() => {
 })
 
 /* All configured groups (from settings + instance groups) */
-const allConfiguredGroups = computed(() => {
-  const set = new Set()
+const allConfiguredGroups = computed<string[]>(() => {
+  const set = new Set<string>()
   if (store.settings && store.settings.groups) {
     for (const g of store.settings.groups) {
       if (g && g.trim()) set.add(g.trim())
@@ -184,7 +185,7 @@ async function onPlay() {
   }
 }
 
-async function chooseInstance(inst) {
+async function chooseInstance(inst: Instance) {
   ddOpen.value = false
   if (inst.id === store.settings.activeInstance) return
   try {
@@ -196,7 +197,7 @@ async function chooseInstance(inst) {
   }
 }
 
-async function quickPlay(inst) {
+async function quickPlay(inst: Instance) {
   if (isWorking.value || isPlaying.value) return
   if (inst.id !== store.settings.activeInstance) {
     await chooseInstance(inst)
@@ -205,10 +206,12 @@ async function quickPlay(inst) {
 }
 
 /* Drag and Drop implementation */
-function onDragStart(e, inst) {
+function onDragStart(e: DragEvent, inst: Instance) {
   draggedInst.value = inst
-  e.dataTransfer.effectAllowed = 'move'
-  e.dataTransfer.setData('text/plain', inst.id)
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', inst.id)
+  }
 }
 
 function onDragEnd() {
@@ -217,20 +220,20 @@ function onDragEnd() {
   dragOverGroupName.value = null
 }
 
-function onDragOverCard(e, targetInst) {
+function onDragOverCard(e: DragEvent, targetInst: Instance) {
   e.preventDefault()
   if (draggedInst.value && draggedInst.value.id !== targetInst.id) {
     dragOverCardId.value = targetInst.id
   }
 }
 
-function onDragLeaveCard(e, targetInst) {
+function onDragLeaveCard(e: DragEvent, targetInst: Instance) {
   if (dragOverCardId.value === targetInst.id) {
     dragOverCardId.value = null
   }
 }
 
-async function onDropOnCard(e, targetInst) {
+async function onDropOnCard(e: DragEvent, targetInst: Instance) {
   e.preventDefault()
   dragOverCardId.value = null
   const src = draggedInst.value
@@ -259,18 +262,18 @@ async function onDropOnCard(e, targetInst) {
   } catch (err) {}
 }
 
-function onDragOverGroup(e, groupName) {
+function onDragOverGroup(e: DragEvent, groupName: string) {
   e.preventDefault()
   dragOverGroupName.value = groupName
 }
 
-function onDragLeaveGroup(e, groupName) {
+function onDragLeaveGroup(e: DragEvent, groupName: string) {
   if (dragOverGroupName.value === groupName) {
     dragOverGroupName.value = null
   }
 }
 
-async function onDropOnGroup(e, groupName) {
+async function onDropOnGroup(e: DragEvent, groupName: string) {
   e.preventDefault()
   dragOverGroupName.value = null
   const src = draggedInst.value
@@ -282,12 +285,12 @@ async function onDropOnGroup(e, groupName) {
   src.group = targetGroup
   try {
     await UpdateInstanceGroup(src.id, targetGroup)
-  } catch (err) {
+  } catch (err: any) {
     toast(t('inst.err') + err, true)
   }
 }
 
-function toggleGroupCollapse(groupName) {
+function toggleGroupCollapse(groupName: string) {
   collapsedGroups.value[groupName] = !collapsedGroups.value[groupName]
 }
 
@@ -299,7 +302,7 @@ function openCreateFolderModal() {
   folderModalOpen.value = true
 }
 
-function openRenameFolderModal(groupName) {
+function openRenameFolderModal(groupName: string) {
   folderModalMode.value = 'rename'
   folderModalOldName.value = groupName
   folderModalName.value = groupName
@@ -325,7 +328,7 @@ async function submitFolderModal() {
       }
       toast(`Папка «${name}» создана`)
       folderModalOpen.value = false
-    } catch (e) {
+    } catch (e: any) {
       toast(t('inst.err') + e, true)
     }
   } else if (folderModalMode.value === 'rename') {
@@ -342,13 +345,13 @@ async function submitFolderModal() {
       }
       toast(`Папка переименована в «${name}»`)
       folderModalOpen.value = false
-    } catch (e) {
+    } catch (e: any) {
       toast(t('inst.err') + e, true)
     }
   }
 }
 
-function promptDeleteFolder(groupName) {
+function promptDeleteFolder(groupName: string) {
   folderToDelete.value = groupName
 }
 
@@ -359,7 +362,7 @@ async function confirmDeleteFolder() {
   try {
     await DeleteGroup(name)
     if (store.settings.groups) {
-      store.settings.groups = store.settings.groups.filter(g => g !== name)
+      store.settings.groups = store.settings.groups.filter((g: string) => g !== name)
     }
     for (const ins of store.instances) {
       if (ins.group === name) {
@@ -367,12 +370,12 @@ async function confirmDeleteFolder() {
       }
     }
     toast(`Папка «${name}» удалена`)
-  } catch (e) {
+  } catch (e: any) {
     toast(t('inst.err') + e, true)
   }
 }
 
-async function assignInstanceToGroup(inst, groupName) {
+async function assignInstanceToGroup(inst: Instance, groupName: string) {
   try {
     const updated = await UpdateInstanceGroup(inst.id, groupName)
     if (updated) {
@@ -381,7 +384,7 @@ async function assignInstanceToGroup(inst, groupName) {
       if (inStore) inStore.group = updated.group
       toast(`Сборка перенесена в папку «${groupName || t('inst.noGroup')}»`)
     }
-  } catch (e) {
+  } catch (e: any) {
     toast(t('inst.err') + e, true)
   }
 }
@@ -389,10 +392,10 @@ async function assignInstanceToGroup(inst, groupName) {
 /* instance context menu */
 const ctxMenuVisible = ref(false)
 const ctxMenuPos = ref({x: 0, y: 0})
-const ctxMenuInst = ref(null)
+const ctxMenuInst = ref<Instance | null>(null)
 const groupSubmenuOpen = ref(false)
 
-function onInstContextMenu(e, inst) {
+function onInstContextMenu(e: MouseEvent, inst: Instance) {
   e.preventDefault()
   ctxMenuInst.value = inst
   groupSubmenuOpen.value = false
@@ -433,7 +436,7 @@ function ctxProfile() {
   }
 }
 
-function openInstUpdate(inst) {
+function openInstUpdate(inst: Instance) {
   chooseInstance(inst)
   store.page = 'instances'
 }
@@ -453,7 +456,7 @@ async function ctxCheckUpdate() {
         toast(t('pack.noUpdates'))
       }
     }
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   }
 }
@@ -464,13 +467,13 @@ async function ctxOpenFolder() {
   if (inst) {
     try {
       await OpenInstanceDir(inst.id)
-    } catch (e) {
+    } catch (e: any) {
       toast(t('inst.err') + e, true)
     }
   }
 }
 
-function ctxMoveToGroup(groupName) {
+function ctxMoveToGroup(groupName: string) {
   const inst = ctxMenuInst.value
   closeContextMenu()
   if (inst) {
@@ -500,9 +503,9 @@ function ctxDelete() {
 }
 
 /* instance delete modal */
-const instToDelete = ref(null)
+const instToDelete = ref<Instance | null>(null)
 
-function promptDeleteInst(inst) {
+function promptDeleteInst(inst: Instance) {
   instToDelete.value = inst
 }
 
@@ -515,7 +518,7 @@ async function confirmDeleteInst() {
     store.instances = store.instances.filter(i => i.id !== inst.id)
     store.settings.activeInstance = newActive || ''
     toast(t('inst.deleted'))
-  } catch (e) {
+  } catch (e: any) {
     toast(t('inst.err') + e, true)
   }
 }
@@ -527,7 +530,7 @@ function openCreate() {
 const ramChip = computed(() => Math.round(store.settings.ramMb / 1024) + ' ' + t('home.ram'))
 
 /* частицы в hero */
-const particlesBox = ref(null)
+const particlesBox = ref<HTMLElement | null>(null)
 onMounted(() => {
   const colors = ['#55d24a', '#8aff7a', '#ffc94a', '#5db4ff', '#ffffff']
   for (let i = 0; i < 26; i++) {
@@ -540,7 +543,7 @@ onMounted(() => {
     s.style.animationDuration = (6 + Math.random() * 9) + 's'
     s.style.animationDelay = (-Math.random() * 12) + 's'
     s.style.opacity = '0'
-    particlesBox.value.appendChild(s)
+    particlesBox.value?.appendChild(s)
   }
 })
 </script>

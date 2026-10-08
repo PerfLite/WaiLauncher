@@ -1,4 +1,4 @@
-import {createApp} from 'vue'
+import { createApp } from 'vue'
 import '@fontsource/rubik/400.css'
 import '@fontsource/rubik/500.css'
 import '@fontsource/rubik/700.css'

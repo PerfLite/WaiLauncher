@@ -1,26 +1,26 @@
-<script setup>
+<script setup lang="ts">
 import {computed, onMounted, onUnmounted, ref, watch} from 'vue'
-import {store, toast} from '../store'
-import {t} from '../i18n'
+import {store, toast} from '@/store'
+import {t} from '@/i18n'
 import {
   SearchModpacks,
   GetModpackDetails,
   InstallModpack,
   CancelInstallModpack,
   OpenURL,
-} from '../../wailsjs/go/main/App'
-import {EventsOn} from '../../wailsjs/runtime/runtime'
-import {renderMarkdown, handleMarkdownClick} from '../utils/markdown'
-import modrinthIcon from '../assets/modrinth-icon.png'
-import curseforgeIcon from '../assets/curseforge-icon.png'
-import ftbIcon from '../assets/ftb-icon.png'
+} from 'bindings/WaiLauncher/app'
+import {onEvent} from '@/utils/wailsEvents'
+import {renderMarkdown, handleMarkdownClick} from '@/utils/markdown'
+import modrinthIcon from '@/assets/modrinth-icon.png'
+import curseforgeIcon from '@/assets/curseforge-icon.png'
+import ftbIcon from '@/assets/ftb-icon.png'
 
 const currentView = ref('catalog') // 'catalog' | 'details'
 const source = ref('modrinth') // 'modrinth' | 'curseforge' | 'ftb'
 const query = ref('')
 const selectedVersion = ref('all')
 const selectedLoader = ref('all')
-const results = ref([])
+const results = ref<any[]>([])
 const loading = ref(false)
 
 const mcVersions = [
@@ -45,22 +45,22 @@ const loaders = [
 ]
 
 /* Detail Page View */
-const selectedPack = ref(null)
-const packDetails = ref(null)
+const selectedPack = ref<any>(null)
+const packDetails = ref<any>(null)
 const loadingDetails = ref(false)
 const chosenVersionId = ref('')
 const verDropdownOpen = ref(false)
 const verSearchQuery = ref('')
 const customInstanceName = ref('')
-const detailTab = ref('description') // 'description' | 'versions' | 'gallery'
-const previewImageIdx = ref(null)
+const detailTab = ref<'description' | 'versions' | 'gallery'>('description')
+const previewImageIdx = ref<number | null>(null)
 
 /* Install Progress */
 const installing = ref(false)
 const installProgress = ref({stage: '', percent: 0, message: '', current: 0, total: 0})
 
-function openGalleryPreview(idx) {
-  previewImageIdx.value = idx
+function openGalleryPreview(idx: any) {
+  previewImageIdx.value = Number(idx)
 }
 
 function closeGalleryPreview() {
@@ -68,7 +68,7 @@ function closeGalleryPreview() {
 }
 
 function nextGalleryImg() {
-  if (!packDetails.value?.gallery?.length) return
+  if (!packDetails.value?.gallery?.length || previewImageIdx.value === null) return
   if (previewImageIdx.value < packDetails.value.gallery.length - 1) {
     previewImageIdx.value++
   } else {
@@ -77,7 +77,7 @@ function nextGalleryImg() {
 }
 
 function prevGalleryImg() {
-  if (!packDetails.value?.gallery?.length) return
+  if (!packDetails.value?.gallery?.length || previewImageIdx.value === null) return
   if (previewImageIdx.value > 0) {
     previewImageIdx.value--
   } else {
@@ -85,7 +85,7 @@ function prevGalleryImg() {
   }
 }
 
-function onKeydown(e) {
+function onKeydown(e: KeyboardEvent) {
   if (verDropdownOpen.value && e.key === 'Escape') {
     verDropdownOpen.value = false
     return
@@ -100,7 +100,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('mods-reset-view', backToCatalog)
   search()
-  EventsOn('modpack-progress', (p) => {
+  onEvent('modpack-progress', (p: any) => {
     installProgress.value = p
     if (p.stage === 'done') {
       installing.value = false
@@ -119,7 +119,7 @@ onUnmounted(() => {
   window.removeEventListener('mods-reset-view', backToCatalog)
 })
 
-let searchTimer = null
+let searchTimer: any = null
 function onSearchInput() {
   clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
@@ -150,7 +150,7 @@ async function search() {
   }
 }
 
-async function openDetails(item) {
+async function openDetails(item: any) {
   selectedPack.value = item
   customInstanceName.value = item.title
   currentView.value = 'details'
@@ -196,7 +196,7 @@ async function cancelInstall() {
 
 const showInstallModal = ref(false)
 
-function openInstallModal(verId) {
+function openInstallModal(verId?: string) {
   verDropdownOpen.value = false
   verSearchQuery.value = ''
   if (verId) {
@@ -217,7 +217,7 @@ function toggleVerDropdown() {
   }
 }
 
-function selectVersion(verId) {
+function selectVersion(verId: string) {
   chosenVersionId.value = verId
   verDropdownOpen.value = false
 }
@@ -226,7 +226,7 @@ const filteredPackVersions = computed(() => {
   if (!packDetails.value?.versions) return []
   const q = verSearchQuery.value.trim().toLowerCase()
   if (!q) return packDetails.value.versions
-  return packDetails.value.versions.filter(v => {
+  return packDetails.value.versions.filter((v: any) => {
     const name = (v.name || '').toLowerCase()
     const num = (v.version_number || '').toLowerCase()
     const gv = (v.game_versions || []).join(' ').toLowerCase()
@@ -242,7 +242,7 @@ function confirmInstall() {
 
 const chosenVersion = computed(() => {
   if (!packDetails.value || !packDetails.value.versions) return null
-  return packDetails.value.versions.find(v => v.id === chosenVersionId.value) || packDetails.value.versions[0]
+  return packDetails.value.versions.find((v: any) => v.id === chosenVersionId.value) || packDetails.value.versions[0]
 })
 
 async function doInstall() {
@@ -278,7 +278,7 @@ async function doInstall() {
   }
 }
 
-function openWebsite(url) {
+function openWebsite(url: string) {
   if (!url) return
   try {
     OpenURL(url)
@@ -287,14 +287,14 @@ function openWebsite(url) {
   }
 }
 
-function formatNumber(num) {
+function formatNumber(num: any) {
   if (!num) return '0'
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
   if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
   return String(num)
 }
 
-function formatDate(dateStr) {
+function formatDate(dateStr: string) {
   if (!dateStr) return ''
   try {
     const d = new Date(dateStr)
@@ -304,7 +304,7 @@ function formatDate(dateStr) {
   }
 }
 
-function formatBytes(bytes) {
+function formatBytes(bytes: number) {
   if (!bytes) return ''
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']

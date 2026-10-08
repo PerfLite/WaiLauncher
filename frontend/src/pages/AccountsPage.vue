@@ -1,7 +1,7 @@
-<script setup>
+<script setup lang="ts">
 import {ref, computed, watch, onMounted, nextTick} from 'vue'
-import {store, activeAccount, getAccountAvatar, reloadAccounts, switchActiveAccount, deleteAccount, toast} from '../store'
-import {t} from '../i18n'
+import {store, activeAccount, getAccountAvatar, reloadAccounts, switchActiveAccount, deleteAccount, toast} from '@/store'
+import {t} from '@/i18n'
 import {
   AddOfflineAccount,
   StartMicrosoftAuth,
@@ -15,17 +15,18 @@ import {
   ClearAccountCape,
   GetPresetCapes,
   OpenURL
-} from '../../wailsjs/go/main/App'
-import skinFallback from '../assets/skin.png'
-import SkinViewer3D from '../components/SkinViewer3D.vue'
+} from 'bindings/WaiLauncher/app'
+import type { Account, PresetCape, MojangCape, DeviceCodeResponse } from 'bindings/WaiLauncher/internal/launcher/auth/models'
+import skinFallback from '@/assets/skin.png'
+import SkinViewer3D from '@/components/SkinViewer3D.vue'
 
-const mode = ref('list') // 'list' | 'add'
-const addTab = ref('offline') // 'offline' | 'microsoft'
-const selectedAccId = ref(null)
+const mode = ref<'list' | 'add'>('list')
+const addTab = ref<'offline' | 'microsoft'>('offline')
+const selectedAccId = ref<string | null>(null)
 
 const currentActiveAcc = computed(() => activeAccount())
 
-const targetAcc = computed(() => {
+const targetAcc = computed<any>(() => {
   if (selectedAccId.value) {
     const found = store.accounts.find(a => a.id === selectedAccId.value)
     if (found) return found
@@ -79,7 +80,7 @@ onMounted(async () => {
 })
 
 // Preset Capes
-const presetCapesList = ref([])
+const presetCapesList = ref<PresetCape[]>([])
 async function loadPresetCapes() {
   try {
     const list = await GetPresetCapes()
@@ -88,12 +89,13 @@ async function loadPresetCapes() {
 }
 
 // Canvas helper to render 2D front of cape texture crisp
-function renderCapeCanvas(el, src) {
+function renderCapeCanvas(el: HTMLCanvasElement | null, src: string) {
   if (!el || !src) return
   const img = new Image()
   img.crossOrigin = 'anonymous'
   img.onload = () => {
     const ctx = el.getContext('2d')
+    if (!ctx) return
     ctx.imageSmoothingEnabled = false
     ctx.clearRect(0, 0, el.width, el.height)
     // Front face of standard 64x32 Minecraft cape is at (1, 1), w: 10, h: 16
@@ -103,10 +105,10 @@ function renderCapeCanvas(el, src) {
 }
 
 const vCapeCanvas = {
-  mounted(el, binding) {
+  mounted(el: HTMLCanvasElement, binding: { value: string }) {
     renderCapeCanvas(el, binding.value)
   },
-  updated(el, binding) {
+  updated(el: HTMLCanvasElement, binding: { value: string; oldValue: string }) {
     if (binding.value !== binding.oldValue) {
       renderCapeCanvas(el, binding.value)
     }
@@ -115,13 +117,13 @@ const vCapeCanvas = {
 
 // Skin modal state
 const skinModalOpen = ref(false)
-const skinTargetAcc = ref(null)
+const skinTargetAcc = ref<any>(null)
 const skinModelVariant = ref('classic')
-const skinInputFile = ref(null)
+const skinInputFile = ref<any>(null)
 const skinInputUrl = ref('')
 const skinSaving = ref(false)
 
-function openSkinModal(acc) {
+function openSkinModal(acc: any) {
   if (!acc) return
   skinTargetAcc.value = acc
   skinModelVariant.value = acc.skinModel || 'classic'
@@ -163,15 +165,15 @@ async function applySkin() {
 
 // Cape modal state
 const capeModalOpen = ref(false)
-const capeTargetAcc = ref(null)
-const capeActiveTab = ref('gallery') // 'gallery' | 'official' | 'custom'
-const selectedPresetCape = ref(null)
-const selectedOfficialCape = ref(null)
-const customCapeFile = ref(null)
+const capeTargetAcc = ref<any>(null)
+const capeActiveTab = ref<'gallery' | 'official' | 'custom'>('gallery')
+const selectedPresetCape = ref<PresetCape | null>(null)
+const selectedOfficialCape = ref<MojangCape | null>(null)
+const customCapeFile = ref<any>(null)
 const customCapeUrl = ref('')
 const capeSaving = ref(false)
 
-async function openCapeModal(acc) {
+async function openCapeModal(acc: any) {
   if (!acc) return
   capeTargetAcc.value = acc
   selectedPresetCape.value = null
@@ -189,7 +191,7 @@ async function openCapeModal(acc) {
     }
     if (acc.capes && acc.capes.length > 0) {
       capeActiveTab.value = 'official'
-      selectedOfficialCape.value = acc.capes.find(c => c.state === 'ACTIVE') || acc.capes[0]
+      selectedOfficialCape.value = acc.capes.find((c: any) => c.state === 'ACTIVE') || acc.capes[0]
     } else {
       capeActiveTab.value = 'gallery'
     }
@@ -243,7 +245,7 @@ async function applyCape() {
   }
 }
 
-async function removeCape(acc) {
+async function removeCape(acc: any) {
   if (!acc) return
   try {
     await ClearAccountCape(acc.id)
@@ -265,11 +267,11 @@ const offlineAvatarUrl = computed(() => {
 })
 
 // Microsoft device code state
-const msState = ref('idle') // 'idle' | 'authorizing' | 'success' | 'error'
+const msState = ref<'idle' | 'authorizing' | 'success' | 'error'>('idle')
 const msError = ref('')
-const msCodeData = ref(null)
+const msCodeData = ref<DeviceCodeResponse | null>(null)
 const codeCopied = ref(false)
-const msCreatedAccount = ref(null)
+const msCreatedAccount = ref<any>(null)
 
 function resetForms() {
   offlineName.value = ''
@@ -281,7 +283,7 @@ function resetForms() {
   msCreatedAccount.value = null
 }
 
-function openAdd(tab = 'offline') {
+function openAdd(tab: 'offline' | 'microsoft' = 'offline') {
   addTab.value = tab
   mode.value = 'add'
   resetForms()
@@ -344,7 +346,7 @@ async function startMsAuth() {
   }
 }
 
-async function pollMsAuth(deviceCode, interval) {
+async function pollMsAuth(deviceCode: string, interval: number) {
   try {
     const acc = await PollMicrosoftAuth(deviceCode, interval)
     if (acc) {
@@ -392,9 +394,9 @@ function cancelMsAuth() {
 }
 
 // ---- Accounts Actions ----
-const accToDelete = ref(null)
+const accToDelete = ref<any>(null)
 
-async function selectAcc(acc) {
+async function selectAcc(acc: any) {
   selectedAccId.value = acc.id
   try {
     await switchActiveAccount(acc.id)
@@ -404,7 +406,7 @@ async function selectAcc(acc) {
   }
 }
 
-function promptDelete(acc) {
+function promptDelete(acc: any) {
   accToDelete.value = acc
 }
 
@@ -423,7 +425,7 @@ async function confirmDeleteAcc() {
   }
 }
 
-async function refreshAcc(acc) {
+async function refreshAcc(acc: any) {
   try {
     await RefreshAccount(acc.id)
     await reloadAccounts()
@@ -433,8 +435,9 @@ async function refreshAcc(acc) {
   }
 }
 
-function onAvatarError(e) {
-  e.target.src = skinFallback
+function onAvatarError(e: Event) {
+  const target = e.target as HTMLImageElement
+  if (target) target.src = skinFallback
 }
 </script>
 

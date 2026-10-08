@@ -1,17 +1,18 @@
-<script setup>
+<script setup lang="ts">
 import {ref, computed, onMounted, onUnmounted} from 'vue'
-import {store, toast} from '../store'
-import {t} from '../i18n'
-import {GetArticle, TranslateArticle, OpenURL} from '../../wailsjs/go/main/App'
+import {store, toast} from '@/store'
+import {t} from '@/i18n'
+import {GetArticle, TranslateArticle, OpenURL} from 'bindings/WaiLauncher/app'
+import type { ArticleDetails } from 'bindings/WaiLauncher/internal/launcher/models'
 
 const activeUrl = ref('')
 const loading = ref(false)
 const translating = ref(false)
 const isTranslated = ref(false)
-const article = ref(null)
+const article = ref<ArticleDetails | null>(null)
 const error = ref('')
 
-async function openArticle(a) {
+async function openArticle(a: any) {
   if (!a || !a.link) return
   activeUrl.value = a.link
   loading.value = true
@@ -26,7 +27,7 @@ async function openArticle(a) {
   try {
     const data = await GetArticle(a.link)
     article.value = data
-  } catch (e) {
+  } catch (e: any) {
     error.value = String(e || t('news.errArticle'))
   } finally {
     loading.value = false
@@ -41,7 +42,7 @@ function closeArticle() {
   translating.value = false
 }
 
-function onKeydown(e) {
+function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && activeUrl.value && store.page === 'news') {
     closeArticle()
   }

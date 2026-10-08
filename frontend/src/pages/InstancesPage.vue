@@ -1,7 +1,7 @@
-<script setup>
+<script setup lang="ts">
 import {ref, watch, computed, onMounted, nextTick} from 'vue'
-import {store, toast} from '../store'
-import {t} from '../i18n'
+import {store, toast} from '@/store'
+import {t} from '@/i18n'
 import {
   Play, CancelPlay, StopGame,
   SetActiveInstance, CreateInstance, DeleteInstance,
@@ -17,19 +17,19 @@ import {
   UpdateInstanceSettings, CloneInstance, GetInstanceCrashReports,
   UpdateInstanceLaunchConfig, PickJavaPath, VerifyInstanceFiles, UpdateInstanceGroup,
   CheckInstanceModpackUpdate, UpdateInstanceModpack
-} from '../../wailsjs/go/main/App'
-import {EventsOn} from '../../wailsjs/runtime/runtime'
-import {renderMarkdown, handleMarkdownClick} from '../utils/markdown'
-import ChangeModVersionModal from '../components/ChangeModVersionModal.vue'
-import modrinthIcon from '../assets/modrinth-icon.png'
-import curseforgeIcon from '../assets/curseforge-icon.png'
-import ftbIcon from '../assets/ftb-icon.png'
+} from 'bindings/WaiLauncher/app'
+import {onEvent} from '@/utils/wailsEvents'
+import {renderMarkdown, handleMarkdownClick} from '@/utils/markdown'
+import ChangeModVersionModal from '@/components/ChangeModVersionModal.vue'
+import modrinthIcon from '@/assets/modrinth-icon.png'
+import curseforgeIcon from '@/assets/curseforge-icon.png'
+import ftbIcon from '@/assets/ftb-icon.png'
 
-function getSourceIcon(src) {
+function getSourceIcon(src?: string): string | undefined {
   if (src === 'modrinth') return modrinthIcon
   if (src === 'curseforge') return curseforgeIcon
   if (src === 'ftb') return ftbIcon
-  return null
+  return undefined
 }
 
 const currentTab = ref('content') // 'content' | 'worlds' | 'screenshots' | 'logs' | 'crashes'
@@ -38,29 +38,29 @@ const searchQuery = ref('')
 const sortOrder = ref('name_asc') // 'name_asc' | 'name_desc' | 'size'
 const sortDropdownOpen = ref(false)
 
-const packUpdateInfo = ref(null)
+const packUpdateInfo = ref<any>(null)
 const checkingPackUpdate = ref(false)
 const updatingPack = ref(false)
 const showChangelogModal = ref(false)
 
-const allContent = ref([])
+const allContent = ref<any[]>([])
 const loadingContent = ref(false)
-const updatesMap = ref({})
+const updatesMap = ref<Record<string, any>>({})
 const checkingUpdates = ref(false)
-const updatingMap = ref({})
-const activeRowMenu = ref(null)
+const updatingMap = ref<Record<string, any>>({})
+const activeRowMenu = ref<any>(null)
 
 /* Change Mod Version */
 const changeVersionModalOpen = ref(false)
-const changeVersionItem = ref(null)
+const changeVersionItem = ref<any>(null)
 
-function openChangeVersion(item) {
+function openChangeVersion(item: any) {
   activeRowMenu.value = null
   changeVersionItem.value = item
   changeVersionModalOpen.value = true
 }
 
-function onModVersionChanged({oldFilename, item}) {
+function onModVersionChanged({oldFilename, item}: {oldFilename: string; item: any}) {
   if (!item) return
   const idx = allContent.value.findIndex(i => i.filename === oldFilename)
   if (idx !== -1) {
@@ -70,14 +70,14 @@ function onModVersionChanged({oldFilename, item}) {
   }
 }
 
-const worldsList = ref([])
+const worldsList = ref<any[]>([])
 const loadingWorlds = ref(false)
 
 /* Screenshots */
-const screenshotsList = ref([])
+const screenshotsList = ref<any[]>([])
 const loadingScreenshots = ref(false)
-const activeScreenshot = ref(null)
-const screenshotToDelete = ref(null)
+const activeScreenshot = ref<any>(null)
+const screenshotToDelete = ref<any>(null)
 
 /* Export & Import */
 const exportingInst = ref(false)
@@ -91,15 +91,15 @@ const editServer = ref('')
 const editVersion = ref('')
 const editLoader = ref('vanilla')
 const editLoaderVersion = ref('')
-const editLoaderVerList = ref([])
+const editLoaderVerList = ref<any[]>([])
 const editLoaderVerLoading = ref(false)
 const editLoaderVerErr = ref(false)
 const editVerQuery = ref('')
 const savingSettings = ref(false)
 const verifyingFiles = ref(false)
 
-const availableGroups = computed(() => {
-  const set = new Set()
+const availableGroups = computed<string[]>(() => {
+  const set = new Set<string>()
   for (const ins of store.instances) {
     if (ins.group && ins.group.trim()) {
       set.add(ins.group.trim())
@@ -115,7 +115,7 @@ const loaders = [
   { id: 'neoforge' }
 ]
 
-const typeNames = computed(() => ({
+const typeNames = computed<Record<string, string>>(() => ({
   release: t('type.release'),
   snapshot: t('type.snapshot'),
   old_beta: t('type.old_beta'),
@@ -131,7 +131,7 @@ const modalEditVersions = computed(() => {
   })
 })
 
-async function fetchEditLoaderVersions(loader, mcVer) {
+async function fetchEditLoaderVersions(loader: string, mcVer: string) {
   if (loader === 'vanilla' || !mcVer) {
     editLoaderVerList.value = []
     editLoaderVersion.value = ''
@@ -170,7 +170,7 @@ const logsText = ref('')
 const loadingLogs = ref(false)
 
 /* Crash Reports */
-const crashReports = ref([])
+const crashReports = ref<any[]>([])
 const loadingCrashes = ref(false)
 
 /* Log search (Ctrl+F) */
@@ -188,16 +188,16 @@ const editWinW = ref(854)
 const editWinH = ref(480)
 
 /* Selection */
-const selectedFiles = ref({})
+const selectedFiles = ref<Record<string, boolean>>({})
 
 /* In-place Find Projects View (Modrinth Style) */
-const viewMode = ref('manage') // 'manage' | 'browse'
-const browseSource = ref('modrinth') // 'modrinth' | 'curseforge'
-const browseCategory = ref('mod') // 'mod' | 'resourcepack' | 'shader'
+const viewMode = ref<'manage' | 'browse'>('manage')
+const browseSource = ref<'modrinth' | 'curseforge'>('modrinth')
+const browseCategory = ref<'mod' | 'resourcepack' | 'shader'>('mod')
 const browseQuery = ref('')
-const browseResults = ref([])
+const browseResults = ref<any[]>([])
 const loadingBrowse = ref(false)
-const installingModMap = ref({})
+const installingModMap = ref<Record<string, any>>({})
 
 /* Current active/selected instance */
 const selectedInst = computed(() => {
@@ -275,7 +275,7 @@ watch(selectedInst, (inst) => {
   }
 }, {immediate: true})
 
-watch(() => store.modpackUpdates[selectedInst.value?.id], (info) => {
+watch(() => selectedInst.value?.id ? store.modpackUpdates[selectedInst.value.id] : null, (info) => {
   if (info) packUpdateInfo.value = info
 })
 
@@ -380,7 +380,7 @@ async function checkUpdatesSilent() {
   }
 }
 
-async function updateMod(item) {
+async function updateMod(item: any) {
   if (!selectedInst.value || !item.updateUrl) return
   updatingMap.value[item.filename] = true
   try {
@@ -397,7 +397,7 @@ async function updateMod(item) {
     if (item.updateFile) item.filename = item.updateFile
     item.hasUpdate = false
     delete updatesMap.value[oldFn]
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   } finally {
     updatingMap.value[item.filename] = false
@@ -422,7 +422,7 @@ async function updateAllMods() {
   toast('Все доступные моды успешно обновлены!')
 }
 
-async function onToggleItem(item) {
+async function onToggleItem(item: any) {
   if (!selectedInst.value) return
   const targetState = !item.enabled
   try {
@@ -433,15 +433,15 @@ async function onToggleItem(item) {
     } else if (!item.filename.endsWith('.disabled')) {
       item.filename += '.disabled'
     }
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   }
 }
 
-const modToDelete = ref(null)
+const modToDelete = ref<any>(null)
 const batchDeleteModal = ref(false)
 
-function promptDeleteMod(item) {
+function promptDeleteMod(item: any) {
   activeRowMenu.value = null
   modToDelete.value = item
 }
@@ -455,7 +455,7 @@ async function confirmDeleteMod() {
     allContent.value = allContent.value.filter(i => i.filename !== item.filename)
     delete selectedFiles.value[item.filename]
     toast(t('mods.removed').replace('{m}', item.name))
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   }
 }
@@ -481,12 +481,12 @@ async function confirmBatchDelete() {
   toast('Выбранные файлы удалены')
 }
 
-async function showInExplorer(item) {
+async function showInExplorer(item: any) {
   if (!selectedInst.value) return
   activeRowMenu.value = null
   try {
     await ShowFileInExplorer(selectedInst.value.id, item.type, item.filename)
-  } catch (e) {
+  } catch (e: any) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   }
 }
@@ -498,7 +498,7 @@ function toggleSelectAll() {
   }
 }
 
-async function batchToggle(enable) {
+async function batchToggle(enable: boolean) {
   if (!selectedInst.value) return
   const selected = filteredContent.value.filter(item => selectedFiles.value[item.filename])
   for (const item of selected) {
@@ -509,7 +509,7 @@ async function batchToggle(enable) {
 }
 
 /* Worlds Management */
-const worldToDelete = ref(null)
+const worldToDelete = ref<any>(null)
 
 async function loadWorlds() {
   if (!selectedInst.value) return
@@ -524,7 +524,7 @@ async function loadWorlds() {
   }
 }
 
-function promptDeleteWorld(w) {
+function promptDeleteWorld(w: any) {
   worldToDelete.value = w
 }
 
@@ -548,7 +548,7 @@ function openWorldsFolder() {
 }
 
 /* Logs */
-const logViewerRef = ref(null)
+const logViewerRef = ref<HTMLElement | null>(null)
 
 function scrollLogsToBottom() {
   nextTick(() => {
@@ -559,7 +559,7 @@ function scrollLogsToBottom() {
 }
 
 onMounted(() => {
-  EventsOn('gamelog', (line) => {
+  onEvent('gamelog', (line: string) => {
     if (!line) return
     if (!logsText.value) {
       logsText.value = line + '\n'
@@ -583,7 +583,7 @@ onMounted(() => {
   })
 
   // Drag-and-drop import of .mrpack/.zip build archives
-  EventsOn('file-drop-import', async (p) => {
+  onEvent('file-drop-import', async (p: string) => {
     if (!p) return
     try {
       const inst = await ImportInstanceFile(p)
@@ -591,7 +591,7 @@ onMounted(() => {
         toast(t('inst.importSuccess'))
         store.selectedInstanceId = inst.id
       }
-    } catch (e) {
+    } catch (e: any) {
       toast((t('inst.err') || 'Ошибка: ') + e, true)
     }
   })
@@ -669,7 +669,7 @@ function openModsFolder() {
 }
 
 /* In-place Find Projects (Browse view) */
-let browseTimer = null
+let browseTimer: any = null
 function onBrowseInput() {
   clearTimeout(browseTimer)
   browseTimer = setTimeout(() => {
@@ -698,7 +698,7 @@ async function searchBrowseProjects() {
   if (!selectedInst.value) return
   loadingBrowse.value = true
   try {
-    let res
+    let res: any
     if (browseSource.value === 'curseforge') {
       res = await SearchCurseForgeMods(
         browseQuery.value,
@@ -726,7 +726,7 @@ async function searchBrowseProjects() {
   }
 }
 
-function isModInstalled(hit) {
+function isModInstalled(hit: any) {
   const title = (hit.title || '').toLowerCase().replace(/[^a-z0-9]/g, '')
   const slug = (hit.slug || '').toLowerCase().replace(/[^a-z0-9]/g, '')
   return allContent.value.some(m => {
@@ -738,29 +738,29 @@ function isModInstalled(hit) {
 
 // Dependency Resolver Dialog State
 const depModalOpen = ref(false)
-const depTargetHit = ref(null)
-const depList = ref([])
-const depSelectedUrls = ref([])
+const depTargetHit = ref<any>(null)
+const depList = ref<any[]>([])
+const depSelectedUrls = ref<any[]>([])
 
-async function installBrowseMod(hit) {
+async function installBrowseMod(hit: any) {
   if (!selectedInst.value) return
   const id = hit.project_id || hit.slug
 
   if (browseCategory.value === 'mod') {
     installingModMap.value[id] = true
     try {
-      let deps
+      let deps: any
       if (browseSource.value === 'curseforge') {
         deps = await CheckCurseForgeDependencies(selectedInst.value.id, id)
       } else {
         deps = await CheckModDependencies(selectedInst.value.id, id)
       }
-      const missing = (deps || []).filter(d => !d.alreadyInstalled)
+      const missing = (deps || []).filter((d: any) => !d.alreadyInstalled)
       if (missing.length > 0) {
         depTargetHit.value = hit
         depList.value = missing
-        const reqs = missing.filter(d => d.dependencyType === 'required').map(d => d.downloadUrl)
-        depSelectedUrls.value = reqs.length > 0 ? reqs : missing.map(d => d.downloadUrl)
+        const reqs = missing.filter((d: any) => d.dependencyType === 'required').map((d: any) => d.downloadUrl)
+        depSelectedUrls.value = reqs.length > 0 ? reqs : missing.map((d: any) => d.downloadUrl)
         depModalOpen.value = true
         installingModMap.value[id] = false
         return
@@ -773,7 +773,7 @@ async function installBrowseMod(hit) {
   await executeModInstall(hit, [])
 }
 
-async function executeModInstall(hit, depUrls) {
+async function executeModInstall(hit: any, depUrls: any[]) {
   if (!selectedInst.value || !hit) return
   const id = hit.project_id || hit.slug
   installingModMap.value[id] = true
@@ -836,7 +836,7 @@ async function changeInstanceIcon() {
     const newIcon = await PickInstanceIcon(selectedInst.value.id)
     if (newIcon) {
       selectedInst.value.icon = newIcon
-      const inStore = store.instances.find(i => i.id === selectedInst.value.id)
+      const inStore = store.instances.find(i => i.id === selectedInst.value?.id)
       if (inStore) inStore.icon = newIcon
       toast('Иконка сборки обновлена')
     }
@@ -846,8 +846,8 @@ async function changeInstanceIcon() {
 }
 
 /* Delete Instance */
-const instToDelete = ref(null)
-function promptDeleteInst(inst) {
+const instToDelete = ref<any>(null)
+function promptDeleteInst(inst: any) {
   instToDelete.value = inst
 }
 
@@ -868,7 +868,7 @@ async function confirmDeleteInst() {
   }
 }
 
-function formatBytes(bytes) {
+function formatBytes(bytes: any) {
   if (!bytes) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
@@ -876,32 +876,34 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-function formatDate(ts) {
+function formatDate(ts: any) {
   if (!ts) return 'Недавно'
-  const d = new Date(ts * 1000)
+  const d = new Date(Number(ts) * 1000)
   return d.toLocaleDateString()
 }
 
-function formatNumber(num) {
+function formatNumber(num: any) {
   if (!num) return '0'
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + ' млн'
-  if (num >= 1000) return (num / 1000).toFixed(1) + ' тыс.'
+  const n = Number(num)
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + ' млн'
+  if (n >= 1000) return (n / 1000).toFixed(1) + ' тыс.'
   return String(num)
 }
 
-function formatPlaytime(seconds) {
-  if (!seconds || seconds <= 0) return ''
-  const hours = (seconds / 3600).toFixed(1)
-  if (hours < 1) {
-    const mins = Math.max(1, Math.floor(seconds / 60))
+function formatPlaytime(seconds: any) {
+  if (!seconds || Number(seconds) <= 0) return ''
+  const secs = Number(seconds)
+  const hours = (secs / 3600).toFixed(1)
+  if (parseFloat(hours) < 1) {
+    const mins = Math.max(1, Math.floor(secs / 60))
     return mins + ' мин.'
   }
   return hours + ' ч.'
 }
 
-function formatLastPlayed(timestamp) {
-  if (!timestamp || timestamp <= 0) return ''
-  const d = new Date(timestamp * 1000)
+function formatLastPlayed(timestamp: any) {
+  if (!timestamp || Number(timestamp) <= 0) return ''
+  const d = new Date(Number(timestamp) * 1000)
   const now = new Date()
   const isToday = d.toDateString() === now.toDateString()
   const timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
@@ -930,7 +932,7 @@ async function loadScreenshots() {
   }
 }
 
-async function copyScreenshotImage(item) {
+async function copyScreenshotImage(item: any) {
   if (!item || !item.dataUrl) return
   try {
     const res = await fetch(item.dataUrl)
@@ -944,7 +946,7 @@ async function copyScreenshotImage(item) {
   }
 }
 
-function promptDeleteScreenshot(item) {
+function promptDeleteScreenshot(item: any) {
   screenshotToDelete.value = item
 }
 
@@ -2349,7 +2351,7 @@ async function saveInstanceSettings() {
             <div>
               <h2 class="modal-title">{{ t('pack.changelog') }}: v{{ packUpdateInfo.latestVersion }}</h2>
               <div class="modal-subtitle">
-                {{ selectedInst.name }} • {{ selectedInst.modpackSource }}
+                {{ selectedInst?.name }} • {{ selectedInst?.modpackSource }}
               </div>
             </div>
           </div>
