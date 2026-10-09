@@ -20,7 +20,7 @@ export const useSettingsStore = defineStore('settings', () => {
     selectedVersion: '',
   })
   const dataDir = ref('')
-  const launcherVer = ref('1.1.3')
+  const launcherVer = ref('1.2.0')
   const versions = ref<any[]>([])
   const latestRelease = ref('')
   const latestSnapshot = ref('')

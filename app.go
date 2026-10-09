@@ -19,7 +19,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-const launcherVersion = "1.1.3"
+const launcherVersion = "1.2.0"
 
 // FilePickResult holds local file path and base64 data URL from file dialog.
 type FilePickResult struct {

@@ -40,7 +40,7 @@ function openExternal(url: string) {
           <div class="modal-body about-modal-body">
             <div class="about-hero">
               <h2 class="about-app-title">Wai<span class="highlight">Launcher</span></h2>
-              <p class="about-app-version">v{{ store.launcherVer || '1.1.3' }} &mdash; {{ t('about.desc') || 'Современный лаунчер Minecraft нового поколения' }}</p>
+              <p class="about-app-version">v{{ store.launcherVer || '1.2.0' }} &mdash; {{ t('about.desc') || 'Современный лаунчер Minecraft нового поколения' }}</p>
             </div>
 
             <!-- Links & Developer section -->
