@@ -32,9 +32,9 @@ function openExternal(url: string) {
 </script>
 
 <template>
-  <DialogRoot v-model:open="isOpen">
+  <DialogRoot v-if="isOpen" v-model:open="isOpen">
     <DialogPortal>
-      <div class="modal-root">
+      <div class="modal-root" v-if="isOpen">
         <DialogOverlay class="modal-backdrop" />
         <DialogContent class="modal-box about-modal-box outline-none">
           <div class="modal-body about-modal-body">

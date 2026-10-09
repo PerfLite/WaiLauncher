@@ -136,9 +136,9 @@ function getVersionInitial(type: any) {
 </script>
 
 <template>
-  <DialogRoot :open="show" @update:open="(val: boolean) => !val && !downloading && emit('close')">
+  <DialogRoot v-if="show" :open="show" @update:open="(val: boolean) => !val && !downloading && emit('close')">
     <DialogPortal>
-      <div class="modal-root">
+      <div class="modal-root" v-if="show">
         <DialogOverlay class="modal-backdrop" />
         <DialogContent class="modal-box mr-change-version-modal outline-none">
       <!-- Modal Header -->

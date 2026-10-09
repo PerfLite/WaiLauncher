@@ -9,7 +9,7 @@ import {
   useLaunchStore,
   useNewsStore,
   useUpdateStore,
-} from './stores'
+} from './stores/index'
 
 export type { ToastItem } from './stores/ui'
 

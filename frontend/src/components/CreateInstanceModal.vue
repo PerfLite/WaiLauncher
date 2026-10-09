@@ -325,9 +325,9 @@ async function onImportMrpackFile() {
 </script>
 
 <template>
-  <DialogRoot v-model:open="isModalOpen">
+  <DialogRoot v-if="isModalOpen" v-model:open="isModalOpen">
     <DialogPortal>
-      <div class="modal-root">
+      <div class="modal-root" v-if="isModalOpen">
         <DialogOverlay class="modal-backdrop" />
         <DialogContent class="modal-box create-modal outline-none" :class="{'menu-mode': currentStep === 'menu'}">
       

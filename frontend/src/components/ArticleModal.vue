@@ -91,9 +91,9 @@ const displayContent = computed(() => {
 </script>
 
 <template>
-  <DialogRoot v-model:open="isOpen">
+  <DialogRoot v-if="isOpen" v-model:open="isOpen">
     <DialogPortal>
-      <div class="modal-root article-modal-root">
+      <div class="modal-root article-modal-root" v-if="isOpen">
         <DialogOverlay class="modal-backdrop article-backdrop" />
         <DialogContent class="article-reader-container outline-none">
           <!-- Top Action Bar -->

@@ -891,6 +891,10 @@ select.sel option{background:var(--panel-2);color:var(--txt)}
   animation:fadeIn .2s ease;
 }
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal-root:empty{
+  display:none !important;
+  pointer-events:none !important;
+}
 
 .modal-backdrop{
   position:absolute;inset:0;

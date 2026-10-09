@@ -66,9 +66,9 @@ function formatDate(s?: string) {
 </script>
 
 <template>
-  <DialogRoot v-model:open="isOpen">
+  <DialogRoot v-if="isOpen" v-model:open="isOpen">
     <DialogPortal>
-      <div class="modal-root" v-if="info">
+      <div class="modal-root" v-if="isOpen">
         <DialogOverlay class="modal-backdrop" />
         <DialogContent
           class="modal-box update-modal outline-none"

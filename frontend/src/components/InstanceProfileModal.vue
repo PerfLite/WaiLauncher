@@ -254,9 +254,9 @@ function formatNumber(num: any) {
 </script>
 
 <template>
-  <DialogRoot :open="open && !!inst" @update:open="(val: boolean) => !val && emit('close')">
+  <DialogRoot v-if="open && !!inst" :open="open && !!inst" @update:open="(val: boolean) => !val && emit('close')">
     <DialogPortal>
-      <div class="modal-root" v-if="inst">
+      <div class="modal-root" v-if="open && !!inst">
         <DialogOverlay class="modal-backdrop" />
         <DialogContent class="modal-box profile-modal outline-none">
       <!-- Profile Header -->
