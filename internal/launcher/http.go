@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,7 +17,53 @@ import (
 	"time"
 )
 
-var httpClient = &http.Client{Timeout: 0} // cancellation via context only
+// No overall Timeout: large asset/library downloads are bounded by the caller's
+// context. The transport caps time-to-first-byte and dial/handshake stalls.
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		MaxIdleConns:          64,
+		MaxIdleConnsPerHost:   16,
+		IdleConnTimeout:       90 * time.Second,
+	},
+}
+
+// idleResetReader cancels the download context if no bytes flow for idle.
+// The transport only bounds time-to-first-byte; a connection that stalls
+// mid-body (common on the CurseForge CDN) would otherwise hang forever.
+type idleResetReader struct {
+	r     io.Reader
+	idle  time.Duration
+	fire  func()
+	timer *time.Timer
+	mu    sync.Mutex
+}
+
+func newIdleResetReader(r io.Reader, idle time.Duration, fire func()) *idleResetReader {
+	ir := &idleResetReader{r: r, idle: idle, fire: fire}
+	ir.arm()
+	return ir
+}
+
+func (ir *idleResetReader) arm() {
+	ir.mu.Lock()
+	defer ir.mu.Unlock()
+	if ir.timer != nil {
+		ir.timer.Stop()
+	}
+	ir.timer = time.AfterFunc(ir.idle, ir.fire)
+}
+
+func (ir *idleResetReader) Read(p []byte) (int, error) {
+	n, err := ir.r.Read(p)
+	if n > 0 || err == nil {
+		ir.arm()
+	}
+	return n, err
+}
 
 func fetchJSON(ctx context.Context, url string, out any) error {
 	data, err := fetchBytes(ctx, url)
@@ -80,6 +127,7 @@ func fileValid(path, sha1sum string, size int64) bool {
 type dlTask struct {
 	url, dest, sha1 string
 	size            int64
+	userAgent       string
 	prog            func(written int64) // optional byte-level progress
 }
 
@@ -105,6 +153,13 @@ func downloadOne(ctx context.Context, t dlTask) error {
 		}
 		return nil
 	}
+	return downloadAlways(ctx, t)
+}
+
+// downloadAlways fetches the task with retry/backoff and atomic rename, without
+// skipping when a valid destination already exists. Used for re-downloadable
+// content (mods, modpack files) where the caller wants a fresh copy.
+func downloadAlways(ctx context.Context, t dlTask) error {
 	if err := os.MkdirAll(filepath.Dir(t.dest), 0o755); err != nil {
 		return err
 	}
@@ -128,6 +183,9 @@ func downloadAttempt(ctx context.Context, t dlTask) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.url, nil)
 	if err != nil {
 		return err
+	}
+	if t.userAgent != "" {
+		req.Header.Set("User-Agent", t.userAgent)
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {

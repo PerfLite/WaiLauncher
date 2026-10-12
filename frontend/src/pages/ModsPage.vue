@@ -8,6 +8,7 @@ import {
   GetModpackDetails,
   InstallModpack,
   CancelInstallModpack,
+  RetryModpackDownloads,
   OpenURL,
 } from 'bindings/WaiLauncher/app'
 import {onEvent} from '@/utils/wailsEvents'
@@ -60,6 +61,14 @@ const previewImageIdx = ref<number | null>(null)
 const installing = ref(false)
 const installProgress = ref({stage: '', percent: 0, message: '', current: 0, total: 0})
 
+/* Partial-failure (some mods didn't download) */
+const partialInfo = ref<{ instanceId: string; failed: number; total: number } | null>(null)
+const showPartialModal = ref(false)
+const retrying = ref(false)
+
+// Captured from the 'modpack-partial' event; consumed once install() resolves.
+let pendingPartial: { instanceId: string; failed: number; total: number } | null = null
+
 function openGalleryPreview(idx: any) {
   previewImageIdx.value = Number(idx)
 }
@@ -106,13 +115,13 @@ onMounted(() => {
     installProgress.value = p
     if (p.stage === 'done') {
       installing.value = false
-      toast(t('pack.installSuccess') || 'Сборка успешно установлена!')
-      // Switch to instances page
-      store.page = 'instances'
     } else if (p.stage === 'error') {
       installing.value = false
       toast((t('pack.installErr') || 'Ошибка установки сборки: ') + p.message, true)
     }
+  })
+  onEvent('modpack-partial', (d: any) => {
+    pendingPartial = {instanceId: d.instanceId, failed: d.failed, total: d.total}
   })
 })
 
@@ -241,6 +250,7 @@ const chosenVersion = computed(() => {
 async function doInstall() {
   if (!chosenVersion.value || installing.value) return
   installing.value = true
+  pendingPartial = null
   installProgress.value = {
     stage: 'downloading',
     percent: 0.05,
@@ -265,10 +275,50 @@ async function doInstall() {
       store.settings.activeInstance = created.id
       store.settings.selectedVersion = created.versionId
     }
+    if (pendingPartial) {
+      // Some mods failed: let the user retry or accept as-is before leaving.
+      partialInfo.value = pendingPartial
+      showPartialModal.value = true
+    } else {
+      toast(t('pack.installSuccess') || 'Сборка успешно установлена!')
+      store.page = 'instances'
+    }
   } catch (e) {
+    const msg = String(e)
+    if (msg.includes('canceled') || msg.includes('cancelled')) {
+      // User-initiated cancel: cancelInstall() already resets UI and toasts.
+      return
+    }
     installing.value = false
     toast((t('pack.installErr') || 'Ошибка установки: ') + e, true)
   }
+}
+
+async function retryPartialDownloads() {
+  if (!partialInfo.value || retrying.value) return
+  retrying.value = true
+  try {
+    const remaining = await RetryModpackDownloads(partialInfo.value.instanceId)
+    if (remaining === 0) {
+      showPartialModal.value = false
+      partialInfo.value = null
+      toast(t('pack.retrySuccess') || 'Все недостающие моды догружены!')
+      store.page = 'instances'
+    } else {
+      partialInfo.value = {...partialInfo.value, failed: remaining}
+      toast(t('pack.retryPartial') || `Осталось недогруженным: ${remaining}`, true)
+    }
+  } catch (e) {
+    toast((t('pack.retryErr') || 'Ошибка повторной загрузки: ') + e, true)
+  } finally {
+    retrying.value = false
+  }
+}
+
+function acceptPartial() {
+  showPartialModal.value = false
+  partialInfo.value = null
+  store.page = 'instances'
 }
 
 function openWebsite(url: string) {
@@ -828,6 +878,32 @@ function formatBytes(bytes: number) {
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>
               <span>Установить сборку</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-root" v-if="showPartialModal && partialInfo">
+        <div class="mp-install-modal-backdrop"></div>
+        <div class="modal-box mp-install-modal-box">
+          <div class="modal-header mp-install-modal-header">
+            <div class="modal-title-group mp-install-header-group">
+              <h3 class="modal-title mp-install-header-title">{{ t('pack.partialTitle') || 'Не все моды загружены' }}</h3>
+              <p class="modal-subtitle mp-install-header-sub">
+                {{ (t('pack.partialBody') || 'Не удалось скачать') }}
+                <b>{{ partialInfo.failed }}</b> / {{ partialInfo.total }}
+              </p>
+            </div>
+          </div>
+          <div class="modal-body mp-install-modal-body">
+            <p>{{ t('pack.partialHint') || 'Сборка установлена, но часть модов отсутствует. Попробуйте догрузить их ещё раз или продолжить как есть.' }}</p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn-sec" @click="acceptPartial" :disabled="retrying">
+              {{ t('pack.partialAccept') || 'Установить как есть' }}
+            </button>
+            <button class="btn-primary" @click="retryPartialDownloads" :disabled="retrying">
+              {{ retrying ? (t('pack.partialRetrying') || 'Догружаю…') : (t('pack.partialRetry') || 'Повторить загрузку') }}
             </button>
           </div>
         </div>

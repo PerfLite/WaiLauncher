@@ -923,7 +923,51 @@ func (a *App) InstallModpack(source, downloadURL, customName, packID, versionID,
 	_ = a.set.save()
 	a.emit("instances-updated", a.loadInstances())
 
+	a.emitModpackPartial(info)
+
 	return &newInst, nil
+}
+
+// emitModpackPartial records files that failed to download during a modpack
+// install and notifies the frontend so it can offer a targeted retry. No-op
+// when everything downloaded successfully.
+func (a *App) emitModpackPartial(info *launcher.InstalledPackInfo) {
+	if info == nil || len(info.Failed) == 0 {
+		return
+	}
+	a.mu.Lock()
+	if a.failedModpacks == nil {
+		a.failedModpacks = make(map[string][]launcher.FailedDownload)
+	}
+	a.failedModpacks[info.ID] = info.Failed
+	a.mu.Unlock()
+	a.emit("modpack-partial", map[string]any{
+		"instanceId": info.ID,
+		"failed":     len(info.Failed),
+		"total":      info.ModsTotal,
+	})
+}
+
+// RetryModpackDownloads re-attempts the files that failed for a given instance.
+// Returns the count that are still failing after this attempt (0 means resolved).
+func (a *App) RetryModpackDownloads(instanceID string) (int, error) {
+	a.mu.Lock()
+	items := a.failedModpacks[instanceID]
+	a.mu.Unlock()
+	if len(items) == 0 {
+		return 0, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	still := launcher.RetryFailedDownloads(ctx, items)
+	a.mu.Lock()
+	if len(still) == 0 {
+		delete(a.failedModpacks, instanceID)
+	} else {
+		a.failedModpacks[instanceID] = still
+	}
+	a.mu.Unlock()
+	return len(still), nil
 }
 
 type ModpackUpdateInfo struct {
@@ -1069,6 +1113,30 @@ func (a *App) UpdateInstanceModpack(instanceID, newDownloadURL, newVersionID, ne
 
 	_ = a.saveInstances(list)
 	a.emit("instances-updated", a.loadInstances())
+
+	// Files that failed during the reinstall live under the temp instance dir
+	// (now removed). Remap their dest into this instance's preserved game dir so
+	// a retry writes to the correct location, then surface the partial failure.
+	if len(info.Failed) > 0 {
+		remapped := make([]launcher.FailedDownload, 0, len(info.Failed))
+		for _, fd := range info.Failed {
+			if newGameDir != gameDir && strings.HasPrefix(fd.Dest, newGameDir) {
+				fd.Dest = filepath.Join(gameDir, strings.TrimPrefix(fd.Dest, newGameDir))
+			}
+			remapped = append(remapped, fd)
+		}
+		a.mu.Lock()
+		if a.failedModpacks == nil {
+			a.failedModpacks = make(map[string][]launcher.FailedDownload)
+		}
+		a.failedModpacks[instanceID] = remapped
+		a.mu.Unlock()
+		a.emit("modpack-partial", map[string]any{
+			"instanceId": instanceID,
+			"failed":     len(remapped),
+			"total":      info.ModsTotal,
+		})
+	}
 
 	progressFn(launcher.ModpackProgress{
 		Stage:   "done",

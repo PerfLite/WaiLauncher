@@ -3,8 +3,6 @@ package launcher
 import (
 	"archive/zip"
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,8 +18,9 @@ import (
 )
 
 const curseForgeAPI = "https://api.curseforge.com/v1"
-const curseForgeKey = "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC"
 const ftbAPI = "https://api.feed-the-beast.com/v1/modpacks/public/modpack"
+
+const curseForgeKey = "$2a$10$wuAJuNZuted3NORVmpgUC.m8sI.pv1tOPKZyBgLFGjxFp/br0lZCC"
 
 // ModpackItem is a unified representation of a modpack from Modrinth, CurseForge or FTB.
 type ModpackItem struct {
@@ -605,13 +604,24 @@ type CurseForgeManifest struct {
 	Overrides string `json:"overrides"`
 }
 
+// FailedDownload describes a single mod/file download that did not succeed,
+// retained so the user can retry just those files without re-running install.
+type FailedDownload struct {
+	URL  string `json:"url"`
+	Dest string `json:"dest"`
+	SHA1 string `json:"sha1"`
+	Size int64  `json:"size"`
+}
+
 // InstalledPackInfo contains metadata of the created instance.
 type InstalledPackInfo struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	VersionID     string `json:"versionId"`
-	Loader        string `json:"loader"`
-	LoaderVersion string `json:"loaderVersion"`
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	VersionID     string           `json:"versionId"`
+	Loader        string           `json:"loader"`
+	LoaderVersion string           `json:"loaderVersion"`
+	ModsTotal     int              `json:"modsTotal"`
+	Failed        []FailedDownload `json:"failed,omitempty"`
 }
 
 // InstallModpackFromURL downloads and installs a Modrinth (.mrpack), CurseForge or FTB modpack.
@@ -638,7 +648,10 @@ func (l *Launcher) InstallModpackFromURL(
 	defer os.Remove(tmpPack.Name())
 	defer tmpPack.Close()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+	dlCtx, dlCancel := context.WithCancel(ctx)
+	defer dlCancel()
+
+	req, err := http.NewRequestWithContext(dlCtx, "GET", downloadURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -657,7 +670,13 @@ func (l *Launcher) InstallModpackFromURL(
 		return nil, fmt.Errorf("download modpack failed with status %d", resp.StatusCode)
 	}
 
-	if _, err := io.Copy(tmpPack, resp.Body); err != nil {
+	if _, err := io.Copy(tmpPack, newIdleResetReader(resp.Body, 45*time.Second, dlCancel)); err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if dlCtx.Err() != nil {
+			return nil, fmt.Errorf("скачивание сборки прервано: сервер не отвечает (нет данных более 45с)")
+		}
 		return nil, fmt.Errorf("write temp pack: %w", err)
 	}
 	tmpPack.Close()
@@ -837,8 +856,8 @@ func (l *Launcher) installModrinthPack(
 
 	numWorkers := 6
 	var wg sync.WaitGroup
-	var downloadErr error
-	var errOnce sync.Once
+	var failures []FailedDownload
+	var failMu sync.Mutex
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -849,11 +868,11 @@ func (l *Launcher) installModrinthPack(
 					return
 				}
 				os.MkdirAll(filepath.Dir(item.path), 0755)
-				err := downloadModWithSha1(ctx, item.url, item.path, item.sha1)
+				err := downloadModWithSha1(ctx, item.url, item.path, item.sha1, 0)
 				if err != nil {
-					errOnce.Do(func() {
-						downloadErr = fmt.Errorf("failed download %s: %w", item.url, err)
-					})
+					failMu.Lock()
+					failures = append(failures, FailedDownload{URL: item.url, Dest: item.path, SHA1: item.sha1})
+					failMu.Unlock()
 				}
 				done := atomic.AddInt32(&completed, 1)
 				pct := 0.35 + (float64(done)/float64(total))*0.60
@@ -869,8 +888,8 @@ func (l *Launcher) installModrinthPack(
 	}
 	wg.Wait()
 
-	if downloadErr != nil {
-		return nil, downloadErr
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	// Finalize instance
@@ -881,6 +900,8 @@ func (l *Launcher) installModrinthPack(
 		VersionID:     mcVer,
 		Loader:        loader,
 		LoaderVersion: loaderVer,
+		ModsTotal:     total,
+		Failed:        failures,
 	}, nil
 }
 
@@ -986,6 +1007,8 @@ func (l *Launcher) installCurseForgePack(
 
 	numWorkers := 6
 	var wg sync.WaitGroup
+	var failures []FailedDownload
+	var failMu sync.Mutex
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -1007,6 +1030,11 @@ func (l *Launcher) installCurseForgePack(
 							Data struct {
 								FileName    string `json:"fileName"`
 								DownloadURL string `json:"downloadUrl"`
+								FileLength  int64  `json:"fileLength"`
+								Hashes      []struct {
+									Value      string `json:"value"`
+									HashSource int    `json:"hashSource"` // 1 = SHA1
+								} `json:"hashes"`
 							} `json:"data"`
 						}
 						if json.NewDecoder(resp.Body).Decode(&fileRes) == nil {
@@ -1016,11 +1044,22 @@ func (l *Launcher) installCurseForgePack(
 							if dlURL == "" && fileName != "" {
 								dlURL = fmt.Sprintf("https://edge.forgecdn.net/files/%d/%d/%s", task.fileID/1000, task.fileID%1000, url.PathEscape(fileName))
 							}
+							var fileSha1 string
+							for _, h := range fileRes.Data.Hashes {
+								if h.HashSource == 1 {
+									fileSha1 = h.Value
+									break
+								}
+							}
 							if dlURL != "" && fileName != "" {
 								folder := determineCurseForgeFolder(classMap[task.projectID], fileName)
 								dest := filepath.Join(instDir, folder, fileName)
 								_ = os.MkdirAll(filepath.Dir(dest), 0755)
-								_ = downloadModWithSha1(ctx, dlURL, dest, "")
+								if err := downloadModWithSha1(ctx, dlURL, dest, fileSha1, fileRes.Data.FileLength); err != nil {
+									failMu.Lock()
+									failures = append(failures, FailedDownload{URL: dlURL, Dest: dest, SHA1: fileSha1, Size: fileRes.Data.FileLength})
+									failMu.Unlock()
+								}
 							}
 						} else {
 							resp.Body.Close()
@@ -1041,6 +1080,10 @@ func (l *Launcher) installCurseForgePack(
 	}
 	wg.Wait()
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Organize any remaining misplaced zip files
 	OrganizeInstanceFolders(instDir)
 
@@ -1051,6 +1094,8 @@ func (l *Launcher) installCurseForgePack(
 		VersionID:     mcVer,
 		Loader:        loader,
 		LoaderVersion: loaderVer,
+		ModsTotal:     total,
+		Failed:        failures,
 	}, nil
 }
 
@@ -1160,47 +1205,40 @@ func OrganizeInstanceFolders(instDir string) {
 	}
 }
 
-func downloadModWithSha1(ctx context.Context, dlURL, destPath, expectedSha1 string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", dlURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "WaiLauncher/0.1.0")
+func downloadModWithSha1(ctx context.Context, dlURL, destPath, expectedSha1 string, size int64) error {
+	return downloadAlways(ctx, dlTask{
+		url:       dlURL,
+		dest:      destPath,
+		sha1:      expectedSha1,
+		size:      size,
+		userAgent: "WaiLauncher/0.1.0",
+	})
+}
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return err
+// RetryFailedDownloads re-attempts the given failed downloads concurrently and
+// returns only those that still fail. Used by the "N из M не докачалось" flow so
+// the user can retry just the missing mods without reinstalling the whole pack.
+func RetryFailedDownloads(ctx context.Context, items []FailedDownload) []FailedDownload {
+	var still []FailedDownload
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 6)
+	for _, it := range items {
+		it := it
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if err := downloadModWithSha1(ctx, it.URL, it.Dest, it.SHA1, it.Size); err != nil {
+				mu.Lock()
+				still = append(still, it)
+				mu.Unlock()
+			}
+		}()
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %d", resp.StatusCode)
-	}
-
-	tmpFile := destPath + ".tmp"
-	f, err := os.Create(tmpFile)
-	if err != nil {
-		return err
-	}
-
-	hasher := sha1.New()
-	w := io.MultiWriter(f, hasher)
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		f.Close()
-		os.Remove(tmpFile)
-		return err
-	}
-	f.Close()
-
-	if expectedSha1 != "" {
-		actualSha1 := hex.EncodeToString(hasher.Sum(nil))
-		if !strings.EqualFold(actualSha1, expectedSha1) {
-			os.Remove(tmpFile)
-			return fmt.Errorf("sha1 mismatch: expected %s got %s", expectedSha1, actualSha1)
-		}
-	}
-
-	return os.Rename(tmpFile, destPath)
+	wg.Wait()
+	return still
 }
 
 func sanitizeID(name string) string {
@@ -1624,6 +1662,8 @@ func (l *Launcher) installFTBPack(
 	close(jobs)
 
 	var wg sync.WaitGroup
+	var failures []FailedDownload
+	var failMu sync.Mutex
 
 	for w := 0; w < concurrency; w++ {
 		wg.Add(1)
@@ -1636,7 +1676,11 @@ func (l *Launcher) installFTBPack(
 				_ = os.MkdirAll(destDir, 0755)
 				destFile := filepath.Join(destDir, f.Name)
 
-				_ = downloadModWithSha1(ctx, f.URL, destFile, f.SHA1)
+				if err := downloadModWithSha1(ctx, f.URL, destFile, f.SHA1, f.Size); err != nil {
+					failMu.Lock()
+					failures = append(failures, FailedDownload{URL: f.URL, Dest: destFile, SHA1: f.SHA1, Size: f.Size})
+					failMu.Unlock()
+				}
 
 				mu.Lock()
 				downloaded++
@@ -1656,6 +1700,10 @@ func (l *Launcher) installFTBPack(
 	}
 	wg.Wait()
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	progressFn(ModpackProgress{Stage: "done", Percent: 1.0, Message: "Установка сборки FTB завершена!"})
 
 	return &InstalledPackInfo{
@@ -1664,6 +1712,8 @@ func (l *Launcher) installFTBPack(
 		VersionID:     mcVer,
 		Loader:        loader,
 		LoaderVersion: loaderVer,
+		ModsTotal:     total,
+		Failed:        failures,
 	}, nil
 }
 

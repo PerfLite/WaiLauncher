@@ -627,6 +627,14 @@ export function ReorderInstances(orderedIDs: string[]): $CancellablePromise<void
 }
 
 /**
+ * RetryModpackDownloads re-attempts the files that failed for a given instance.
+ * Returns the count that are still failing after this attempt (0 means resolved).
+ */
+export function RetryModpackDownloads(instanceID: string): $CancellablePromise<number> {
+    return $Call.ByID(838514635, instanceID);
+}
+
+/**
  * SaveSettings validates and persists settings.
  */
 export function SaveSettings(s: $models.Settings): $CancellablePromise<void> {

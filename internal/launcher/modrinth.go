@@ -7,10 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
-	"time"
 )
 
 const modrinthAPI = "https://api.modrinth.com/v2"
@@ -232,37 +229,11 @@ func (l *Launcher) GetModrinthProjectVersions(ctx context.Context, projectIDOrSl
 
 // DownloadModFile downloads a file from URL to destPath.
 func (l *Launcher) DownloadModFile(ctx context.Context, fileURL, destPath string) error {
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, "GET", fileURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "WaiLauncher/0.1.0 (contact@wailauncher.local)")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download mod file returned %d", resp.StatusCode)
-	}
-
-	tmp := destPath + fmt.Sprintf(".tmp-%d", time.Now().UnixNano())
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(f, resp.Body)
-	f.Close()
-	if copyErr != nil {
-		_ = os.Remove(tmp)
-		return copyErr
-	}
-	return os.Rename(tmp, destPath)
+	return downloadAlways(ctx, dlTask{
+		url:       fileURL,
+		dest:      destPath,
+		userAgent: "WaiLauncher/0.1.0 (contact@wailauncher.local)",
+	})
 }
 
 // GetModrinthVersion fetches a single version by ID.

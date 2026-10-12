@@ -447,7 +447,6 @@ function onAvatarError(e: Event) {
     <div class="accounts-page-head">
       <div class="accounts-head-info">
         <h2 class="accounts-page-title">{{ t('accounts.title') }}</h2>
-        <p class="accounts-page-sub">{{ t('accounts.subtitle') }}</p>
       </div>
 
       <div class="accounts-head-actions">
@@ -681,7 +680,6 @@ function onAvatarError(e: Event) {
                 @keyup.enter="submitOffline"
                 autofocus
               >
-              <span class="fld-hint">{{ t('accounts.offline.hint') }}</span>
             </div>
 
             <p v-if="offlineError" class="acc-error-msg">{{ offlineError }}</p>

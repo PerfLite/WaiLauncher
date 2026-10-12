@@ -19,7 +19,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-const launcherVersion = "1.2.0"
+const launcherVersion = "1.2.1"
 
 // FilePickResult holds local file path and base64 data URL from file dialog.
 type FilePickResult struct {
@@ -69,13 +69,17 @@ type App struct {
 	packCancel context.CancelFunc
 	discordRPC *launcher.DiscordRPC
 	trayStopItem *application.MenuItem
+	// Per-instance list of modpack files that failed to download during install,
+	// kept so the UI can offer a targeted retry without reinstalling the pack.
+	failedModpacks map[string][]launcher.FailedDownload
 }
 
 // NewApp creates a new App application struct.
 func NewApp() *App {
 	return &App{
-		ctx:        context.Background(),
-		discordRPC: &launcher.DiscordRPC{ClientID: ""},
+		ctx:            context.Background(),
+		discordRPC:     &launcher.DiscordRPC{ClientID: ""},
+		failedModpacks: make(map[string][]launcher.FailedDownload),
 	}
 }
 

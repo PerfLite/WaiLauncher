@@ -1040,6 +1040,11 @@ select.sel option{background:var(--panel-2);color:var(--txt)}
 
 /* Оффлайн форма */
 .offline-preview-row{display:flex;gap:18px;align-items:center;margin-bottom:20px}
+.offline-avatar{width:44px;height:44px;flex:none}
+.offline-avatar img{
+  width:44px;height:44px;border-radius:10px;object-fit:cover;object-position:top;
+  background:#18202c;border:2px solid var(--line-2);
+}
 .offline-avatar-preview{width:64px;height:64px;flex:none}
 .offline-avatar-preview img{
   width:64px;height:64px;border-radius:14px;object-fit:cover;object-position:top;
@@ -3863,9 +3868,9 @@ select.sel option{background:var(--panel-2);color:var(--txt)}
   gap: 16px;
 }
 .accounts-page-title {
-  font-size: 24px;
+  font-size: 19px;
   font-weight: 800;
-  margin: 0 0 4px;
+  margin: 0;
   color: #fff;
 }
 .accounts-page-sub {
@@ -4320,6 +4325,11 @@ select.sel option{background:var(--panel-2);color:var(--txt)}
 }
 .btn-ms-start:hover {
   filter: brightness(1.1);
+}
+.ms-auth-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 .ms-code-card {
   background: rgba(0, 0, 0, 0.35);

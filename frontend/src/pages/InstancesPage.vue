@@ -17,7 +17,7 @@ import {
   ExportInstance, ImportInstanceDialog, ImportInstanceFile,
   UpdateInstanceSettings, CloneInstance, GetInstanceCrashReports,
   UpdateInstanceLaunchConfig, PickJavaPath, VerifyInstanceFiles, UpdateInstanceGroup,
-  CheckInstanceModpackUpdate, UpdateInstanceModpack
+  CheckInstanceModpackUpdate, UpdateInstanceModpack, RetryModpackDownloads
 } from 'bindings/WaiLauncher/app'
 import {onEvent} from '@/utils/wailsEvents'
 import {renderMarkdown, handleMarkdownClick} from '@/utils/markdown'
@@ -43,6 +43,13 @@ const packUpdateInfo = ref<any>(null)
 const checkingPackUpdate = ref(false)
 const updatingPack = ref(false)
 const showChangelogModal = ref(false)
+
+/* Partial-failure (some mods didn't download during pack update) */
+const partialInfo = ref<{ instanceId: string; failed: number; total: number } | null>(null)
+const showPartialModal = ref(false)
+const retryingPartial = ref(false)
+// Captured from 'modpack-partial'; consumed once the update call resolves.
+let pendingPartial: { instanceId: string; failed: number; total: number } | null = null
 
 const allContent = ref<any[]>([])
 const loadingContent = ref(false)
@@ -308,6 +315,7 @@ async function onUpdateModpack() {
   if (!selectedInst.value || !packUpdateInfo.value || !packUpdateInfo.value.hasUpdate || updatingPack.value) return
   updatingPack.value = true
   showChangelogModal.value = false
+  pendingPartial = null
   try {
     const updated = await UpdateInstanceModpack(
       selectedInst.value.id,
@@ -319,14 +327,46 @@ async function onUpdateModpack() {
       store.instances = store.instances.map(i => i.id === updated.id ? updated : i)
       packUpdateInfo.value = null
       delete store.modpackUpdates[selectedInst.value.id]
-      toast(t('pack.updateSuccess', {v: updated.modpackVersionName || updated.versionId}))
       loadContent()
+    }
+    if (pendingPartial) {
+      // Some mods failed during update: offer a targeted retry before reporting success.
+      partialInfo.value = pendingPartial
+      showPartialModal.value = true
+    } else if (updated) {
+      toast(t('pack.updateSuccess', {v: updated.modpackVersionName || updated.versionId}))
     }
   } catch (e) {
     toast((t('inst.err') || 'Ошибка: ') + e, true)
   } finally {
     updatingPack.value = false
   }
+}
+
+async function retryPartialDownloads() {
+  if (!partialInfo.value || retryingPartial.value) return
+  retryingPartial.value = true
+  try {
+    const remaining = await RetryModpackDownloads(partialInfo.value.instanceId)
+    if (remaining === 0) {
+      showPartialModal.value = false
+      partialInfo.value = null
+      toast(t('pack.retrySuccess') || 'Все недостающие моды догружены!')
+      loadContent()
+    } else {
+      partialInfo.value = {...partialInfo.value, failed: remaining}
+      toast(t('pack.retryPartial') + remaining, true)
+    }
+  } catch (e) {
+    toast((t('pack.retryErr') || 'Ошибка повторной загрузки: ') + e, true)
+  } finally {
+    retryingPartial.value = false
+  }
+}
+
+function acceptPartial() {
+  showPartialModal.value = false
+  partialInfo.value = null
 }
 
 watch(currentTab, (tab) => {
@@ -595,6 +635,10 @@ onMounted(() => {
     } catch (e: any) {
       toast((t('inst.err') || 'Ошибка: ') + e, true)
     }
+  })
+
+  onEvent('modpack-partial', (d: any) => {
+    pendingPartial = {instanceId: d.instanceId, failed: d.failed, total: d.total}
   })
 })
 
@@ -2383,6 +2427,34 @@ async function saveInstanceSettings() {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>
             <span>{{ updatingPack ? t('pack.updating') : t('pack.updateBtn') }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Partial-failure (mods missing after update) -->
+    <div v-if="showPartialModal && partialInfo" class="modal-root">
+      <div class="modal-backdrop"></div>
+      <div class="modal-box">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div>
+              <h2 class="modal-title">{{ t('pack.partialTitle') }}</h2>
+              <div class="modal-subtitle">
+                {{ t('pack.partialBody') }} <b>{{ partialInfo.failed }}</b> / {{ partialInfo.total }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-body">
+          <p>{{ t('pack.partialHint') }}</p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-sec" @click="acceptPartial" :disabled="retryingPartial">
+            {{ t('pack.partialAccept') }}
+          </button>
+          <button class="btn-primary" @click="retryPartialDownloads" :disabled="retryingPartial">
+            {{ retryingPartial ? t('pack.partialRetrying') : t('pack.partialRetry') }}
           </button>
         </div>
       </div>

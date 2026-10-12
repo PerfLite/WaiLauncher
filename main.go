@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"os"
 
 	"WaiLauncher/internal/launcher"
 
@@ -12,6 +13,14 @@ import (
 var assets embed.FS
 
 func main() {
+	// Some endpoint-protection products (e.g. КИБЕРЩИТ/Kaspersky-based AV) inject
+	// DLLs into the WebView2 renderer, which breaks Chromium's GPU compositing and
+	// leaves the window painting only the background colour (black screen). Force
+	// software compositing unless the operator already supplied their own args.
+	if _, ok := os.LookupEnv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"); !ok {
+		os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu --disable-gpu-compositing")
+	}
+
 	root, err := launcher.DefaultRoot()
 	if err != nil {
 		root = "data"
